@@ -1,26 +1,20 @@
-import { HardhatUserConfig } from "hardhat/config";
+import { HardhatUserConfig, task } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
-import { anvilStart, anvilStop } from "./test/anvil-setup";
+
+const DEFAULT_NODE_URL = "http://127.0.0.1:8545";
 
 const config: HardhatUserConfig = {
-  defaultNetwork: "anvil",
+  defaultNetwork: "localhost",
   networks: {
-    anvil: {
-      url: "http://127.0.0.1:8545",
+    hardhat: {
+      from: DEFAULT_NODE_URL,
+    },
+    "mainnet-fork": {
+      url: DEFAULT_NODE_URL,
       forking: {
-        url: process.env.RPC_URL ?? "",
+        url: `https://mainnet.infura.io/v3/${process.env.WEB3_INFURA_PROJECT_ID}`,
       },
       loggingEnabled: true,
-    },
-  },
-  mocha: {
-    rootHooks: {
-      beforeAll: async () => {
-        await anvilStart();
-      },
-      afterAll: async () => {
-        await anvilStop();
-      },
     },
   },
   solidity: {
@@ -70,3 +64,10 @@ const config: HardhatUserConfig = {
 };
 
 export default config;
+
+task("code", "Log the bytecode associated with the specified address")
+  .addPositionalParam("address")
+  .setAction(async ({ address }, hre) => {
+    const code = await hre.ethers.provider.getCode(address);
+    console.log(code);
+  });
