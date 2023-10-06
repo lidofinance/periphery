@@ -15,8 +15,10 @@
     "lint:ts:fix": "pnpm lint:ts --fix",
     "lint": "pnpm lint:sol && pnpm lint:ts",
     "format": "prettier . --write --ignore-path .gitignore --ignore-path .prettierignore",
+    "typegen": "pnpm typechain --target ethers-v6 'abi/*.json'",
     "test": "npx hardhat test",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "postinstall": "pnpm typegen"
   },
   "lint-staged": {
     "./**/*.ts": [
