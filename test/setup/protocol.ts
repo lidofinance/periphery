@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import { WithdrawalQueue, WithdrawalQueue__factory } from "../typechain-types";
+import { WithdrawalQueue, WithdrawalQueue__factory } from "../../typechain-types";
 import { protocolConfig } from "./config.mainnet";
 import { ProtocolConfig } from "./types";
 

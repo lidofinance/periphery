@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import describeContract from "./describe";
+import describeContract from "./setup/describe";
 
 describeContract("WithdrawalQueue", (protocol) => {
   it("should return correct stETH address", async () => {

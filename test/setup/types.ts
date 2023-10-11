@@ -1,4 +1,4 @@
-import { EIP721StETH, StETH, WithdrawalQueue, WstETH } from "../typechain-types";
+import { EIP721StETH, StETH, WithdrawalQueue, WstETH } from "../../typechain-types";
 import { protocolConfig } from "./config.mainnet";
 
 export type ProtocolConfig = typeof protocolConfig;
