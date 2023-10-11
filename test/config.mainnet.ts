@@ -1,6 +1,9 @@
-import { ProtocolConfig } from "./types";
-
-export const protocolConfig: ProtocolConfig = {
+export const protocolConfig = Object.freeze({
+  eip712StETH: {
+    implementation: {
+      address: "0x8F73e4C2A6D852bb4ab2A45E6a9CF5715b3228B7",
+    },
+  },
   stETH: {
     proxy: {
       address: "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
@@ -17,4 +20,9 @@ export const protocolConfig: ProtocolConfig = {
       address: "0xE42C659Dc09109566720EA8b2De186c2Be7D94D9",
     },
   },
-};
+  wstETH: {
+    implementation: {
+      address: "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+    },
+  },
+} as const);
