@@ -79,9 +79,8 @@ describe("WithdrawalQueue", function () {
 
     // claim eth
     const previousStakerEthBalanace = await provider.getBalance(staker.address);
-    await withdrawalQueue.claimWithdrawal(stakerRequestId, { from: staker.address });
-
-    provider.waitForBlock((await provider.getBlockNumber()) + 1);
+    const tx = await withdrawalQueue.claimWithdrawal(stakerRequestId, { from: staker.address });
+    await tx.wait();
     const currentStakerEthBalanace = await provider.getBalance(staker.address);
     expect(currentStakerEthBalanace).to.equal(previousStakerEthBalanace + stake);
   });
