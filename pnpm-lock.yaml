@@ -87,6 +87,9 @@ devDependencies:
   '@typescript-eslint/parser':
     specifier: ^6.6.0
     version: 6.6.0(eslint@8.48.0)(typescript@5.2.2)
+  bigint-conversion:
+    specifier: ^2.4.2
+    version: 2.4.2
   chai:
     specifier: ^4.2.0
     version: 4.3.8
@@ -102,6 +105,9 @@ devDependencies:
   eslint-config-prettier:
     specifier: ^9.0.0
     version: 9.0.0(eslint@8.48.0)
+  ethereumjs-util:
+    specifier: ^7.1.5
+    version: 7.1.5
   ethers:
     specifier: ^6.4.0
     version: 6.7.1
@@ -1123,6 +1129,10 @@ packages:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.1
       '@jridgewell/sourcemap-codec': 1.4.15
+    dev: true
+
+  /@juanelas/base64@1.1.4:
+    resolution: {integrity: sha512-kTHx4orHxr+9y/OAPLa2Z4SMXL4cXeqcEXZre6bmIO3iKklyfI2KFWdZ8uQJIdtOdeMW2K9ZKhpU6NiNtvnyqg==}
     dev: true
 
   /@metamask/eth-sig-util@4.0.1:
@@ -3023,6 +3033,12 @@ packages:
 
   /bech32@1.1.4:
     resolution: {integrity: sha512-s0IrSOzLlbvX7yp4WBfPITzpAU8sqQcpsmwXDiKwrG4r491vwCO/XpejasRNl0piBMe/DvP4Tz0mIS/X1DPJBQ==}
+    dev: true
+
+  /bigint-conversion@2.4.2:
+    resolution: {integrity: sha512-2s3aRYaQtYGqY1w6x2PQqYbHUjktOWX0S0dkv7c+FjRnkKspictZ4IaEKmGEtZJjT2ccR29ufPB7QPEDfSs4bg==}
+    dependencies:
+      '@juanelas/base64': 1.1.4
     dev: true
 
   /bigint-crypto-utils@3.3.0:
