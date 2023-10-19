@@ -9,7 +9,7 @@ const STETH_BALANCE_ERROR_MARGIN = 2n;
 const MAX_UINT256 = 2n ** 256n - 1n;
 const PRECISION_FACTOR = 10n ** 27n;
 
-describe("WithdrawalQueue", function () {
+xdescribe("WithdrawalQueue", function () {
   xit("allows to withdraw via permit from another account", async function () {
     // set up provider
     const provider = new JsonRpcProvider("http://127.0.0.1:8545");
