@@ -109,7 +109,7 @@ describe("WithdrawalQueue", function () {
       await provider.send("evm_revert", [allWithdrawalRequestsFinalizedSnapshotId]);
     });
 
-    xit("allows the staker to go through the entire flow from stake to claim", async function () {
+    it("allows the staker to go through the entire flow from stake to claim", async function () {
       // * * * STAKE * * * *
       const stakerStethBalanceBeforeStake = await steth.balanceOf(staker.address);
       const stakerEthBalanceBeforeStake = await provider.getBalance(staker.address);
