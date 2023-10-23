@@ -3,6 +3,9 @@ import { expect } from "chai";
 import { ecsign } from "ethereumjs-util";
 import {
   AbiCoder,
+  BaseContract,
+  ContractTransactionReceipt,
+  ContractTransactionResponse,
   HDNodeWallet,
   JsonRpcProvider,
   JsonRpcSigner,
@@ -41,6 +44,7 @@ describe("WithdrawalQueue", function () {
     // signers
     let staker: HDNodeWallet;
     let stethAsSigner: JsonRpcSigner;
+    let ethWhale: JsonRpcSigner;
 
     // contracts
     let steth: StETH;
@@ -48,6 +52,15 @@ describe("WithdrawalQueue", function () {
 
     // constant values
     const stakeAmount = parseUnits("10.0", "ether");
+
+    let stakeAmountInShares: bigint;
+    let stakerStethBalanceBeforeStake: bigint;
+    let stakerSharesBeforeStake: bigint;
+    let stakerEthBalanceBeforeStake: bigint;
+
+    let stakerStethBalanceAfterStake: bigint;
+    let stakerSharesAfterStake: bigint;
+    let stakerEthBalanceAfterStake: bigint;
 
     this.beforeAll(async function () {
       initialForkStateSnapshotId = await provider.send("evm_snapshot", []);
@@ -73,30 +86,51 @@ describe("WithdrawalQueue", function () {
       await provider.send("anvil_impersonateAccount", [stethAddress]);
       stethAsSigner = new JsonRpcSigner(provider, stethAddress);
 
-      // rate = totalShares * precisionFactor / totalShares
-      const [totalPooledEther, totalShares] = await Promise.all([steth.getTotalPooledEther(), steth.getTotalShares()]);
-      const currentShareRate = (totalPooledEther * PRECISION_FACTOR) / totalShares;
-      const lastUnfinalizedWithdrawalRequestId = await withdrawalQueue.getLastRequestId();
-
-      const { ethToLock } = await withdrawalQueue.prefinalize([lastUnfinalizedWithdrawalRequestId], currentShareRate);
-
-      // top up Lido buffer by simulating a whale submit
       const ethWhaleAddress = "0x00000000219ab540356cBB839Cbe05303d7705Fa"; // deposit contract 😏
-      const ethWhaleBalance = await provider.getBalance(ethWhaleAddress);
-      expect(ethWhaleBalance).to.be.greaterThanOrEqual(
-        ethToLock,
-        "Make sure the whale has enough ether required for finalization",
-      );
       await provider.send("anvil_impersonateAccount", [ethWhaleAddress]);
-      const ethWhale = await provider.getSigner(ethWhaleAddress);
-      await ethWhale.sendTransaction({
-        to: stethAddress,
-        value: ethToLock,
-      });
+      ethWhale = await provider.getSigner(ethWhaleAddress);
 
-      await withdrawalQueue.connect(stethAsSigner).finalize(lastUnfinalizedWithdrawalRequestId, currentShareRate);
-      const lastFinalizedWithdrawalRequestId = await withdrawalQueue.getLastFinalizedRequestId();
-      expect(lastFinalizedWithdrawalRequestId).to.equal(lastUnfinalizedWithdrawalRequestId);
+      // * * * STAKE * * * *
+      const stakeReferral = ZeroAddress;
+      [stakerStethBalanceBeforeStake, stakerSharesBeforeStake, stakerEthBalanceBeforeStake] = await Promise.all([
+        steth.balanceOf(staker.address),
+        steth.sharesOf(staker.address),
+        provider.getBalance(staker.address),
+      ]);
+
+      const stakeTxReceipt = await steth
+        .submit(stakeReferral, {
+          value: stakeAmount,
+        })
+        .then(receipt);
+      [stakerStethBalanceAfterStake, stakerSharesAfterStake, stakerEthBalanceAfterStake] = await Promise.all([
+        steth.balanceOf(staker.address),
+        steth.sharesOf(staker.address),
+        provider.getBalance(staker.address),
+      ]);
+
+      const stakeLogs = parseLogs(stakeTxReceipt, [steth]);
+      stakeAmountInShares = stakerSharesAfterStake - stakerSharesBeforeStake;
+
+      expect(stakeAmount - stakerStethBalanceAfterStake - stakerStethBalanceBeforeStake).to.be.lessThanOrEqual(
+        STETH_BALANCE_ERROR_MARGIN,
+      );
+      expect(stakerEthBalanceAfterStake).to.be.equal(stakerEthBalanceBeforeStake - stakeAmount - stakeTxReceipt!.fee);
+
+      expect(stakeLogs.length).to.equal(3);
+
+      expect(stakeLogs[0]?.name).to.equal("Submitted");
+      expect(stakeLogs[0]?.args.toArray()).to.deep.equal([staker.address, stakeAmount, stakeReferral]);
+
+      expect(stakeLogs[1]?.name).to.equal("Transfer");
+      expect(stakeLogs[1]?.args.toArray()).to.deep.equal([
+        ZeroAddress,
+        staker.address,
+        stakerStethBalanceAfterStake - stakerStethBalanceBeforeStake,
+      ]);
+
+      expect(stakeLogs[2]?.name).to.equal("TransferShares");
+      expect(stakeLogs[2]?.args.toArray()).to.deep.equal([ZeroAddress, staker.address, stakeAmountInShares]);
 
       allWithdrawalRequestsFinalizedSnapshotId = await provider.send("evm_snapshot", []);
     });
@@ -110,108 +144,147 @@ describe("WithdrawalQueue", function () {
     });
 
     it("allows the staker to go through the entire flow from stake to claim", async function () {
-      // * * * STAKE * * * *
-      const stakerStethBalanceBeforeStake = await steth.balanceOf(staker.address);
-      const stakerEthBalanceBeforeStake = await provider.getBalance(staker.address);
-
-      const stakeTx = await steth.submit(ZeroAddress, {
-        value: stakeAmount,
-      });
-      const stakeTxReceipt = await stakeTx.wait();
-
-      const stakerStethBalanceAfterStake = await steth.balanceOf(staker.address);
-      const stakerEthBalanceAfterStake = await provider.getBalance(staker.address);
-
-      expect(stakeAmount - stakerStethBalanceAfterStake - stakerStethBalanceBeforeStake).to.be.lessThanOrEqual(
-        STETH_BALANCE_ERROR_MARGIN,
-        "Staker stETH balance after stake is updated by the amount staked within the stETH balance error margin",
-      );
-
-      expect(stakerEthBalanceAfterStake).to.be.equal(
-        stakerEthBalanceBeforeStake - stakeAmount - stakeTxReceipt!.fee,
-        "Staker ETH balance after stake decreases by the amount staked and the tx fee",
-      );
-
       // * * * SUBMIT WITHDRAWAL REQUEST * * *
 
       // give withdrawal queue allowance
       const allowanceBeforeApprove = await steth.allowance(staker.address, withdrawalQueueAddress);
-      const approveTx = await steth.approve(withdrawalQueueAddress, stakeAmount);
-      const approveTxReceipt = await approveTx.wait();
-      const allowanceAfterApprove = await steth.allowance(staker.address, withdrawalQueueAddress);
-      const stakerEthBalanceAfterApprove = await provider.getBalance(staker.address);
-      expect(allowanceAfterApprove).to.equal(
-        allowanceBeforeApprove + stakeAmount,
-        "WithdrawalQueue allowance given by staker was increased by the amount of stake",
-      );
-      expect(stakerEthBalanceAfterApprove).to.equal(
-        stakerEthBalanceAfterStake - approveTxReceipt!.fee,
-        "Approve tx fee was deducted from the staker's ETH balance",
-      );
+
+      const approveTxReceipt = await steth.approve(withdrawalQueueAddress, stakeAmount).then(receipt);
+
+      const [allowanceAfterApprove, stakerEthBalanceAfterApprove] = await Promise.all([
+        steth.allowance(staker.address, withdrawalQueueAddress),
+        provider.getBalance(staker.address),
+      ]);
+
+      const approveLogs = parseLogs(approveTxReceipt, [steth]);
+
+      expect(approveLogs.length).to.equal(1);
+      expect(approveLogs[0]?.name).to.equal("Approval");
+      expect(approveLogs[0]?.args.toArray()).to.deep.equal([staker.address, withdrawalQueueAddress, stakeAmount]);
+
+      expect(allowanceAfterApprove).to.equal(allowanceBeforeApprove + stakeAmount);
+      expect(stakerEthBalanceAfterApprove).to.equal(stakerEthBalanceAfterStake - approveTxReceipt!.fee);
 
       // make sure the staker has no withdrawal requests submitted
       const stakerRequestIdsBeforeWithdrawalRequest = await withdrawalQueue.getWithdrawalRequests(staker.address);
-      expect(stakerRequestIdsBeforeWithdrawalRequest.length).to.equal(
-        0,
-        "Staker does not have withdrawal requests submitted",
-      );
+      expect(stakerRequestIdsBeforeWithdrawalRequest.length).to.equal(0);
 
       // submit withdrawal request
       const withdrawalRequests = [stakeAmount];
-      const requestTx = await withdrawalQueue.requestWithdrawals(withdrawalRequests, staker.address);
-      const requestTxReceipt = await requestTx.wait();
+      const requestTxReceipt = await withdrawalQueue
+        .requestWithdrawals(withdrawalRequests, staker.address)
+        .then(receipt);
+
       const lastRequestId = await withdrawalQueue.getLastRequestId();
-      const stakerRequestIds = await withdrawalQueue.getWithdrawalRequests(staker.address);
-      const stakerRequestId = stakerRequestIds[0];
-      expect(stakerRequestIds.length).to.equal(
-        withdrawalRequests.length,
-        "Only 1 withdrawal request submitted by the staker",
-      );
-      expect(lastRequestId).to.equal(stakerRequestId, "Last request id matches the staker's request id");
       const stakerEthBalanceAfterRequest = await provider.getBalance(staker.address);
+      const requestLogs = parseLogs(requestTxReceipt, [steth, withdrawalQueue]);
+
+      const stakerRequestIds = await withdrawalQueue.getWithdrawalRequests(staker.address);
+
+      expect(stakerRequestIds.length).to.equal(withdrawalRequests.length);
+      const stakerRequestId = stakerRequestIds[0];
+      expect(lastRequestId).to.equal(stakerRequestId);
       expect(stakerEthBalanceAfterRequest).to.equal(stakerEthBalanceAfterApprove - requestTxReceipt!.fee);
 
-      // finalize request
+      expect(requestLogs.length).to.equal(5);
+
+      expect(requestLogs[0]?.name).to.equal("Approval");
+      expect(requestLogs[0]?.args.toArray()).to.deep.equal([
+        staker.address,
+        withdrawalQueueAddress,
+        allowanceAfterApprove - stakeAmount,
+      ]);
+
+      expect(requestLogs[1]?.name).to.equal("Transfer");
+      expect(requestLogs[1]?.args.toArray()).to.deep.equal([staker.address, withdrawalQueueAddress, stakeAmount]);
+
+      expect(requestLogs[2]?.name).to.equal("TransferShares");
+      expect(requestLogs[2]?.args.toArray()).to.deep.equal([
+        staker.address,
+        withdrawalQueueAddress,
+        stakeAmountInShares,
+      ]);
+
+      expect(requestLogs[3]?.name).to.equal("WithdrawalRequested");
+      expect(requestLogs[3]?.args.toArray()).to.deep.equal([
+        stakerRequestId,
+        staker.address,
+        staker.address,
+        stakeAmount,
+        stakeAmountInShares,
+      ]);
+
+      expect(requestLogs[4]?.name).to.equal("Transfer");
+      expect(requestLogs[4]?.args.toArray()).to.deep.equal([ZeroAddress, staker.address, stakerRequestId]);
+
+      // * * * FINALIZE WITHDRAWAL REQUEST * * *
+
       const [totalPooledEther, totalShares] = await Promise.all([steth.getTotalPooledEther(), steth.getTotalShares()]);
       const currentShareRate = (totalPooledEther * PRECISION_FACTOR) / totalShares;
-      const { ethToLock: stakerClaimableEth } = await withdrawalQueue.prefinalize([stakerRequestId], currentShareRate);
-      await withdrawalQueue.connect(stethAsSigner).finalize(stakerRequestId, currentShareRate);
-      const lastFinalizedRequestId = await withdrawalQueue.getLastFinalizedRequestId();
-      expect(lastFinalizedRequestId).to.equal(stakerRequestId, "Last finalized request is that of the staker's");
+      const { ethToLock, sharesToBurn } = await withdrawalQueue.prefinalize([stakerRequestId], currentShareRate);
 
-      // claim eth
-      const claimTx = await withdrawalQueue.claimWithdrawal(stakerRequestId, { from: staker.address });
-      const claimTxReceipt = await claimTx.wait();
+      // top up Lido buffer by simulating a whale submit
+      const ethWhaleBalance = await provider.getBalance(ethWhale.address);
+      expect(ethWhaleBalance).to.be.greaterThanOrEqual(ethToLock);
+      await steth.connect(ethWhale).submit(ZeroAddress, { value: ethToLock });
+
+      const lastFinalizedRequestIdBeforeFinalize = await withdrawalQueue.getLastFinalizedRequestId();
+
+      const finalizeTxReceipt = await withdrawalQueue
+        .connect(stethAsSigner)
+        .finalize(stakerRequestId, currentShareRate, {
+          value: ethToLock,
+        })
+        .then(receipt);
+
+      const stakerClaimableEth = (currentShareRate * stakeAmountInShares) / PRECISION_FACTOR;
+      const lastFinalizedRequestIdAfterFinalize = await withdrawalQueue.getLastFinalizedRequestId();
+      const finalizeBlockTimestamp = BigInt((await finalizeTxReceipt!.getBlock()).timestamp);
+      const finalizeLogs = parseLogs(finalizeTxReceipt, [withdrawalQueue]);
+
+      expect(lastFinalizedRequestIdAfterFinalize).to.equal(stakerRequestId);
+
+      expect(finalizeLogs.length).to.equal(2);
+
+      expect(finalizeLogs[0]?.name).to.equal("WithdrawalsFinalized");
+      expect(finalizeLogs[0]?.args.toArray()).to.deep.equal([
+        lastFinalizedRequestIdBeforeFinalize + 1n,
+        lastFinalizedRequestIdAfterFinalize,
+        ethToLock,
+        sharesToBurn,
+        finalizeBlockTimestamp,
+      ]);
+
+      expect(finalizeLogs[1]?.name).to.equal("BatchMetadataUpdate");
+      expect(finalizeLogs[1]?.args.toArray()).to.deep.equal([
+        lastFinalizedRequestIdBeforeFinalize + 1n,
+        lastFinalizedRequestIdAfterFinalize,
+      ]);
+
+      // * * * CLAIM ETH * * *
+      const claimTxReceipt = await withdrawalQueue
+        .claimWithdrawal(stakerRequestId, { from: staker.address })
+        .then(receipt);
+
       const stakerEthBalanceAfterClaim = await provider.getBalance(staker.address);
+      const claimLogs = parseLogs(claimTxReceipt, [withdrawalQueue]);
+
       expect(stakerEthBalanceAfterClaim).to.equal(
         stakerEthBalanceAfterRequest + stakerClaimableEth - claimTxReceipt!.fee,
-        "Staker eth balance after claim increased by the amount of eth owed according to the finalization share rate with the claim fee deducted",
       );
+
+      expect(claimLogs.length).to.equal(2);
+
+      expect(claimLogs[0]?.name).to.equal("WithdrawalClaimed");
+      expect(claimLogs[0]?.args.toArray()).to.deep.equal([
+        stakerRequestId,
+        staker.address,
+        staker.address,
+        stakerClaimableEth,
+      ]);
     });
 
     it("allows claiming eth from another account via permit", async function () {
-      // * * * STAKE * * * *
-      const stakerStethBalanceBeforeStake = await steth.balanceOf(staker.address);
-      const stakerEthBalanceBeforeStake = await provider.getBalance(staker.address);
-
-      const stakeTx = await steth.submit(ZeroAddress, {
-        value: stakeAmount,
-      });
-      const stakeTxReceipt = await stakeTx.wait();
-
-      const stakerStethBalanceAfterStake = await steth.balanceOf(staker.address);
-      const stakerEthBalanceAfterStake = await provider.getBalance(staker.address);
-
-      expect(stakeAmount - stakerStethBalanceAfterStake - stakerStethBalanceBeforeStake).to.be.lessThanOrEqual(
-        STETH_BALANCE_ERROR_MARGIN,
-        "Staker stETH balance after stake is updated by the amount staked within the stETH balance error margin",
-      );
-
-      expect(stakerEthBalanceAfterStake).to.be.equal(
-        stakerEthBalanceBeforeStake - stakeAmount - stakeTxReceipt!.fee,
-        "Staker ETH balance after stake decreases by the amount staked and the tx fee",
-      );
-
       // * * * SIGN EIP-721 PERMIT * * * *
       const stethDomainSeparator = await steth.DOMAIN_SEPARATOR();
       const permitType = "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)";
@@ -245,8 +318,10 @@ describe("WithdrawalQueue", function () {
 
       // submit withdrawal request from the staker to claim by the claimer
       const withdrawalRequests = [stakeAmount];
-      const requestTx = await withdrawalQueue.requestWithdrawalsWithPermit(withdrawalRequests, claimer.address, permit);
-      const requestTxReceipt = await requestTx.wait();
+      const requestTxReceipt = await withdrawalQueue
+        .requestWithdrawalsWithPermit(withdrawalRequests, claimer.address, permit)
+        .then(receipt);
+
       const lastRequestId = await withdrawalQueue.getLastRequestId();
       const claimerRequestIds = await withdrawalQueue.getWithdrawalRequests(claimer.address);
       const claimerRequestId = claimerRequestIds[0];
@@ -258,30 +333,102 @@ describe("WithdrawalQueue", function () {
       const stakerEthBalanceAfterRequest = await provider.getBalance(staker.address);
       expect(stakerEthBalanceAfterRequest).to.equal(stakerEthBalanceAfterStake - requestTxReceipt!.fee);
 
-      // finalize request
+      // * * * FINALIZE WITHDRAWAL REQUEST * * *
+
       const [totalPooledEther, totalShares] = await Promise.all([steth.getTotalPooledEther(), steth.getTotalShares()]);
       const currentShareRate = (totalPooledEther * PRECISION_FACTOR) / totalShares;
-      const { ethToLock: claimerClaimableEth } = await withdrawalQueue.prefinalize(
-        [claimerRequestId],
-        currentShareRate,
-      );
-      await withdrawalQueue.connect(stethAsSigner).finalize(claimerRequestId, currentShareRate);
-      const lastFinalizedRequestId = await withdrawalQueue.getLastFinalizedRequestId();
-      expect(lastFinalizedRequestId).to.equal(claimerRequestId, "Last finalized request is that of the claimer's");
+      const { ethToLock, sharesToBurn } = await withdrawalQueue.prefinalize([claimerRequestId], currentShareRate);
 
-      // claim eth
+      // top up Lido buffer by simulating a whale submit
+      const ethWhaleBalance = await provider.getBalance(ethWhale.address);
+      expect(ethWhaleBalance).to.be.greaterThanOrEqual(ethToLock);
+      await steth.connect(ethWhale).submit(ZeroAddress, { value: ethToLock });
+
+      const lastFinalizedRequestIdBeforeFinalize = await withdrawalQueue.getLastFinalizedRequestId();
+
+      const finalizeTxReceipt = await withdrawalQueue
+        .connect(stethAsSigner)
+        .finalize(claimerRequestId, currentShareRate, {
+          value: ethToLock,
+        })
+        .then(receipt);
+
+      const claimerClaimableEth = (currentShareRate * stakeAmountInShares) / PRECISION_FACTOR;
+      const lastFinalizedRequestIdAfterFinalize = await withdrawalQueue.getLastFinalizedRequestId();
+      const finalizeBlockTimestamp = BigInt((await finalizeTxReceipt!.getBlock()).timestamp);
+      const finalizeLogs = parseLogs(finalizeTxReceipt, [withdrawalQueue]);
+
+      expect(lastFinalizedRequestIdAfterFinalize).to.equal(claimerRequestId);
+
+      expect(finalizeLogs.length).to.equal(2);
+
+      expect(finalizeLogs[0]?.name).to.equal("WithdrawalsFinalized");
+      expect(finalizeLogs[0]?.args.toArray()).to.deep.equal([
+        lastFinalizedRequestIdBeforeFinalize + 1n,
+        lastFinalizedRequestIdAfterFinalize,
+        ethToLock,
+        sharesToBurn,
+        finalizeBlockTimestamp,
+      ]);
+
+      expect(finalizeLogs[1]?.name).to.equal("BatchMetadataUpdate");
+      expect(finalizeLogs[1]?.args.toArray()).to.deep.equal([
+        lastFinalizedRequestIdBeforeFinalize + 1n,
+        lastFinalizedRequestIdAfterFinalize,
+      ]);
+
+      // * * * CLAIM ETH * * *
       const claimerEthBalanceBeforeClaim = await provider.getBalance(claimer.address);
-      const claimTx = await withdrawalQueue.connect(claimer).claimWithdrawal(claimerRequestId);
-      const claimTxReceipt = await claimTx.wait();
+      const claimTxReceipt = await withdrawalQueue.connect(claimer).claimWithdrawal(claimerRequestId).then(receipt);
+
       const claimerEthBalanceAfterClaim = await provider.getBalance(claimer.address);
+      const claimLogs = parseLogs(claimTxReceipt, [withdrawalQueue]);
+
       expect(claimerEthBalanceAfterClaim).to.equal(
         claimerEthBalanceBeforeClaim + claimerClaimableEth - claimTxReceipt!.fee,
-        "Claimer eth balance after claim increased by the amount of eth owed according to the finalization share rate with the claim fee deducted",
       );
+
+      expect(claimLogs.length).to.equal(2);
+
+      expect(claimLogs[0]?.name).to.equal("WithdrawalClaimed");
+      expect(claimLogs[0]?.args.toArray()).to.deep.equal([
+        claimerRequestId,
+        claimer.address,
+        claimer.address,
+        claimerClaimableEth,
+      ]);
     });
   });
 });
 
 function strip0x(hex: string) {
   return hex.slice(0, 2) === "0x" ? hex.slice(2) : hex;
+}
+
+function parseLogs(txReceipt: ContractTransactionReceipt | null, contracts: BaseContract[]) {
+  return txReceipt!.logs.map((log) => {
+    for (let i = 0; i < contracts.length; i++) {
+      try {
+        const parsedLog = contracts[i].interface.parseLog({
+          ...log,
+          topics: log.topics as string[],
+        });
+
+        if (!parsedLog) {
+          throw new Error();
+        }
+
+        return parsedLog;
+      } catch {
+        const lastContract = contracts.length - 1 === i;
+        if (lastContract) {
+          throw new Error("Couldn't parse log with given contract ABIs");
+        }
+      }
+    }
+  });
+}
+
+function receipt(contractTransactionResponse: ContractTransactionResponse) {
+  return contractTransactionResponse.wait();
 }
