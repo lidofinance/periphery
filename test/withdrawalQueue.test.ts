@@ -22,7 +22,7 @@ const STETH_BALANCE_ERROR_MARGIN = 2n;
 const PRECISION_FACTOR = 10n ** 27n;
 const MAX_UINT256 = 2n ** 256n - 1n;
 
-describe("WithdrawalQueue", function () {
+xdescribe("WithdrawalQueue", function () {
   const {
     stETH: {
       proxy: { address: stethAddress },

@@ -25,4 +25,9 @@ export const protocolConfig = Object.freeze({
       address: "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
     },
   },
+  depositSecurityModule: {
+    implementation: {
+      address: "0xC77F8768774E1c9244BEed705C4354f2113CFc09",
+    },
+  },
 } as const);
