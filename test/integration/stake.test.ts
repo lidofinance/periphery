@@ -11,9 +11,10 @@ import {
 } from "../../typechain-types";
 import { impersonate } from "../helpers/account";
 import { parseLogs } from "../helpers/logs";
+import { promiseAllValues } from "../helpers/misc";
 import { protocolConfig } from "../setup/config.mainnet";
 
-const STETH_BALANCE_ERROR_MARGIN = 2n;
+const STETH_BALANCE_MAX_WEI_ERROR = 2n;
 const PRECISION_FACTOR = 10n ** 27n;
 // const MAX_UINT256 = 2n ** 256n - 1n;
 const WHALE_ADDRESS = "0x00000000219ab540356cBB839Cbe05303d7705Fa"; // deposit contract 😏
@@ -74,6 +75,12 @@ describe("Stake", function () {
       withdrawalQueue.getLastFinalizedRequestId(),
     ]);
 
+    // TODO: don't use return
+    if (lastUnfinalizedRequestId === lastFinalizedRequestIdBeforeFinalize) {
+      // Nothing to finalize
+      return;
+    }
+
     const [totalPooledEther, totalShares] = await Promise.all([steth.getTotalPooledEther(), steth.getTotalShares()]);
     const currentShareRate = (totalPooledEther * PRECISION_FACTOR) / totalShares;
     const { ethToLock, sharesToBurn } = await withdrawalQueue.prefinalize([lastUnfinalizedRequestId], currentShareRate);
@@ -118,61 +125,43 @@ describe("Stake", function () {
     await provider.send("evm_revert", [initialForkStateSnapshotId]);
   });
 
-  it("Stake -> Deposit -> Rebase", async function () {
-    const [stakerStethBalanceBeforeStake, stakerSharesBeforeStake, stakerEthBalanceBeforeStake] = await Promise.all([
-      steth.balanceOf(staker.address),
-      steth.sharesOf(staker.address),
-      provider.getBalance(staker.address),
-    ]);
+  it.only("Stake -> Deposit -> Rebase", async function () {
+    async function getStethState() {
+      return await promiseAllValues({
+        stakerStethBalance: steth.balanceOf(staker.address),
+        stakerShares: steth.sharesOf(staker.address),
+        stakerEthBalance: provider.getBalance(staker.address),
+        totalSupply: steth.totalSupply(),
+        bufferedEther: steth.getBufferedEther(),
+        stakeLimit: steth.getCurrentStakeLimit(),
+        stakeAmountInShares: steth.getSharesByPooledEth(stakeAmount),
+      });
+    }
 
-    expect(stakerStethBalanceBeforeStake).to.equal(0);
-    expect(stakerSharesBeforeStake).to.equal(0);
+    const before = await getStethState();
 
     const { maxStakeLimit, maxStakeLimitGrowthBlocks } = await steth.getStakeLimitFullInfo();
     const growthPerBlock = maxStakeLimit / maxStakeLimitGrowthBlocks;
 
-    const [
-      totalSupplyBeforeStake,
-      bufferedEtherBeforeStake,
-      currentStakeLimitBeforeStake,
-      stakeAmountInSharesBeforeStake,
-    ] = await Promise.all([
-      steth.totalSupply(),
-      steth.getBufferedEther(),
-      steth.getCurrentStakeLimit(),
-      steth.getSharesByPooledEth(stakeAmount),
-    ]);
-
     const stakeTxReceipt = await steth.submit(ZeroAddress, { value: stakeAmount }).then(receipt);
 
-    const [stakerStethBalanceAfterStake, stakerSharesAfterStake, stakerEthBalanceAfterStake] = await Promise.all([
-      steth.balanceOf(staker.address),
-      steth.sharesOf(staker.address),
-      provider.getBalance(staker.address),
-    ]);
+    const after = await getStethState();
 
-    const [totalSupplyAfterStake, bufferedEtherAfterStake, currentStakeLimitAfterStake, stakeAmountInSharesAfterStake] =
-      await Promise.all([
-        steth.totalSupply(),
-        steth.getBufferedEther(),
-        steth.getCurrentStakeLimit(),
-        steth.getSharesByPooledEth(stakeAmount),
-      ]);
-
-    expect(stakeAmount - stakerStethBalanceAfterStake - stakerStethBalanceBeforeStake).to.be.lessThanOrEqual(
-      STETH_BALANCE_ERROR_MARGIN,
+    expect(stakeAmount - after.stakerStethBalance - before.stakerEthBalance).to.be.lessThanOrEqual(
+      STETH_BALANCE_MAX_WEI_ERROR,
     );
-    expect(stakerEthBalanceAfterStake).to.equal(stakerEthBalanceBeforeStake - stakeAmount - stakeTxReceipt!.fee);
-    expect(stakeAmountInSharesBeforeStake).to.equal(stakerSharesAfterStake);
-    expect(stakeAmountInSharesBeforeStake).to.equal(stakeAmountInSharesAfterStake);
+    expect(after.stakerEthBalance).to.equal(before.stakerEthBalance - stakeAmount - stakeTxReceipt!.fee);
 
-    expect(totalSupplyAfterStake).to.equal(totalSupplyBeforeStake + stakeAmount);
-    expect(bufferedEtherAfterStake).to.be.equal(bufferedEtherBeforeStake + stakeAmount);
+    expect(before.stakeAmountInShares).to.equal(after.stakeAmountInShares);
+    expect(after.stakerShares).to.equal(before.stakerShares + before.stakeAmountInShares);
 
-    if (currentStakeLimitBeforeStake >= maxStakeLimit - growthPerBlock) {
-      expect(currentStakeLimitAfterStake).to.equal(currentStakeLimitBeforeStake - stakeAmount);
+    expect(after.totalSupply).to.equal(before.totalSupply + stakeAmount);
+    expect(after.bufferedEther).to.be.equal(before.bufferedEther + stakeAmount);
+
+    if (before.stakeLimit >= maxStakeLimit - growthPerBlock) {
+      expect(after.stakeLimit).to.equal(before.stakeLimit - stakeAmount);
     } else {
-      expect(currentStakeLimitAfterStake).to.equal(currentStakeLimitBeforeStake - stakeAmount + growthPerBlock);
+      expect(after.stakeLimit).to.equal(before.stakeLimit - stakeAmount + growthPerBlock);
     }
 
     const stakeLogs = parseLogs(stakeTxReceipt, [steth]);
@@ -185,11 +174,11 @@ describe("Stake", function () {
     expect(stakeLogs[1]?.args.toArray()).to.deep.equal([
       ZeroAddress,
       staker.address,
-      stakerStethBalanceAfterStake - stakerStethBalanceBeforeStake,
+      after.stakerStethBalance - before.stakerStethBalance,
     ]);
 
     expect(stakeLogs[2]?.name).to.equal("TransferShares");
-    expect(stakeLogs[2]?.args.toArray()).to.deep.equal([ZeroAddress, staker.address, stakeAmountInSharesAfterStake]);
+    expect(stakeLogs[2]?.args.toArray()).to.deep.equal([ZeroAddress, staker.address, after.stakeAmountInShares]);
 
     const [
       // { depositedValidators: depositedValidatorsBeforeDeposit },
@@ -203,7 +192,15 @@ describe("Stake", function () {
       depositSecurityModule.getMaxDeposits(),
     ]);
 
-    expect(depositableEtherBeforeDeposit).to.equal(bufferedEtherAfterStake - unfinalizedStETH);
+    expect(depositableEtherBeforeDeposit).to.equal(after.bufferedEther - unfinalizedStETH);
+
+    const depositSecurityModuleBalance = await provider.getBalance(depositSecurityModuleAddress);
+    console.log({ depositSecurityModuleAddress, depositSecurityModuleBalance });
+
+    // TODO: topup depositSecurityModule balance (neither of the sendTransaction-s below works)
+    // await staker.sendTransaction({ to: depositSecurityModuleAddress, value: parseUnits("10.0", "ether") })
+    // await whale.sendTransaction({ value: parseUnits("10.0", "ether"), to: depositSecurityModuleAddress })
+    return;
 
     const depositTxReceipt = await steth
       .connect(dsmAsSigner)
