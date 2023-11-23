@@ -1,21 +1,21 @@
 # Mantle Goerli Deployment & Configuration
 
 parameters:
-  - &wstETH "0x6320cD32aA674d2898A68ec82e869385Fc5f7E2f"
-  - &agent "0x4333218072D5d7008546737786663c38B4D561A4"
-  - &l1EmergencyBreaksMultisig "0xa5f1d7d49f581136cf6e58b32cbe9a2039c48ba1"
-  - &l2EmergencyBreaksMultisig "0xa5f1d7d49f581136cf6e58b32cbe9a2039c48ba1"
-  - &mantleL1CrossDomainMessenger "0x7Bfe603647d5380ED3909F6f87580D0Af1B228B4" # https://github.com/mantlenetworkio/networks/blob/main/goerli/info/testnet-info.yaml
-  - &mantleL2CrossDomainMessenger "0x4200000000000000000000000000000000000007" # https://github.com/mantlenetworkio/networks/blob/main/goerli/info/testnet-info.yaml
+  - &wstETH "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
+  - &agent "0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c"
+  - &l1EmergencyBreaksMultisig "0x73b047fe6337183A454c5217241D780a932777bD"
+  - &l2EmergencyBreaksMultisig "0xa8579D42E34398267dE16e6eeeCdb7ED0EFF953C"
+  - &mantleL1CrossDomainMessenger "0x676A795fe6E43C17c668de16730c3F690FEB7120" # https://github.com/mantlenetworkio/networks/blob/main/mainnet/info/mainnet-info.yaml
+  - &mantleL2CrossDomainMessenger "0x4200000000000000000000000000000000000007" # https://github.com/mantlenetworkio/networks/blob/main/mainnet/info/mainnet-info.yaml
 
 deployed:
-  - &l1TokenBridge "0xBc6bbb98E73D15cc6a280e96b32Cc73b4f9068E1"
-  - &l1TokenBridgeImpl "0x8bed2E40522E21119B8A78A4842767c9bCceC47b"
-  - &l2GovernanceExecutor "0xa09BA6f7660C616D2B45218b3169c855A695328f"
-  - &l2TokenBridge "0xFCCC4297be972bb2861Da6D78a6fad588dF03ab1"
-  - &l2TokenBridgeImpl "0x7Aa9EEEcECD56Bd43Bb66ee1B42dBEB754792C84"
-  - &l2WstETH "0x2C402BE58E5849c5413a79aa3b8aF3136e6C017F"
-  - &l2WstETHImpl "0x1008C85f796314c0985639b1a03083Be53eEf5aA"
+  - &l1TokenBridge "0xf273d09fA2EEEb372BAEAc2056498a180d24c05E"
+  - &l1TokenBridgeImpl "0x30a3fCdFf44DaCBf25ae4f563aCF79B01Aa19a07"
+  - &l2GovernanceExecutor "0x3a7B055BF88CdC59D20D0245809C6E6B3c5819dd"
+  - &l2TokenBridge "0xD95729a53870C3f3ab5110f47cA2Ed87BE96F0a0"
+  - &l2TokenBridgeImpl "0x470A6328c5E613a31f4238110cC123d188B851F2"
+  - &l2WstETH "0xf273d09fA2EEEb372BAEAc2056498a180d24c05E"
+  - &l2WstETHImpl "0x30a3fCdFf44DaCBf25ae4f563aCF79B01Aa19a07"
 
 roles:
   - &DEFAULT_ADMIN_ROLE "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -25,7 +25,7 @@ roles:
   - &WITHDRAWALS_ENABLER_ROLE "0x9ab8816a3dc0b3849ec1ac00483f6ec815b07eee2fd766a353311c823ad59d0d"
 
 l1:
-  rpcUrl: https://ethereum-goerli.publicnode.com # url or env var
+  rpcUrl: L1_RPC_URL # https://ethereum.publicnode.com # url or env var
   contracts:
     tokenBridge:
       name: L1ERC20TokenBridge
@@ -59,12 +59,11 @@ l1:
       ozAcl:
         *DEFAULT_ADMIN_ROLE : [*agent]
         *DEPOSITS_DISABLER_ROLE : [*agent, *l1EmergencyBreaksMultisig]
-        *DEPOSITS_ENABLER_ROLE : [*agent]
         *WITHDRAWALS_DISABLER_ROLE : [*agent, *l1EmergencyBreaksMultisig]
         *WITHDRAWALS_ENABLER_ROLE : [*agent]
 
 l2:
-  rpcUrl: https://rpc.testnet.mantle.xyz # url or env var
+  rpcUrl: https://rpc.mantle.xyz # url or env var
   contracts:
     governanceExecutor:
       name: OptimismBridgeExecutor
@@ -91,7 +90,7 @@ l2:
         symbol: wstETH
         decimals: 18
         bridge: *l2TokenBridge
-        totalSupply: 22500000000000
+        # totalSupply: 5000000000000000
         version: "1"
       implementationChecks: {}
     tokenBridge:
