@@ -1,4 +1,4 @@
-# Mantle Goerli Deployment & Configuration
+# Mantle Mainnet Deployment & Configuration
 
 parameters:
   - &wstETH "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
@@ -90,7 +90,6 @@ l2:
         symbol: wstETH
         decimals: 18
         bridge: *l2TokenBridge
-        # totalSupply: 5000000000000000
         version: "1"
       implementationChecks: {}
     tokenBridge:

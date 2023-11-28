@@ -91,7 +91,6 @@ l2:
         symbol: wstETH
         decimals: 18
         bridge: *l2TokenBridge
-        totalSupply: 22500000000000
         version: "1"
       implementationChecks: {}
     tokenBridge:
