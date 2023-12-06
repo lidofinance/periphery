@@ -71,6 +71,7 @@ l2:
       name: LineaBridgeExecutor
       address: *l2GovernanceExecutor
       checks:
+        getEthereumGovernanceExecutor: *agent
         LINEA_MESSAGE_SERVICE: *l2MessageService
         getGracePeriod: 86400
         getGuardian: *ZERO_ADDRESS
