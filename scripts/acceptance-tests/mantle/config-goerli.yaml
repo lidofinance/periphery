@@ -1,0 +1,130 @@
+# Mantle Goerli Deployment & Configuration
+
+parameters:
+  - &wstETH "0x6320cD32aA674d2898A68ec82e869385Fc5f7E2f"
+  - &agent "0x4333218072D5d7008546737786663c38B4D561A4"
+  - &l1EmergencyBreaksMultisig "0xa5f1d7d49f581136cf6e58b32cbe9a2039c48ba1"
+  - &l2EmergencyBreaksMultisig "0xa5f1d7d49f581136cf6e58b32cbe9a2039c48ba1"
+  - &mantleL1CrossDomainMessenger "0x7Bfe603647d5380ED3909F6f87580D0Af1B228B4" # https://github.com/mantlenetworkio/networks/blob/main/goerli/info/testnet-info.yaml
+  - &mantleL2CrossDomainMessenger "0x4200000000000000000000000000000000000007" # https://github.com/mantlenetworkio/networks/blob/main/goerli/info/testnet-info.yaml
+
+deployed:
+  - &l1TokenBridge "0xBc6bbb98E73D15cc6a280e96b32Cc73b4f9068E1"
+  - &l1TokenBridgeImpl "0x8bed2E40522E21119B8A78A4842767c9bCceC47b"
+  - &l2GovernanceExecutor "0xa09BA6f7660C616D2B45218b3169c855A695328f"
+  - &l2TokenBridge "0xFCCC4297be972bb2861Da6D78a6fad588dF03ab1"
+  - &l2TokenBridgeImpl "0x7Aa9EEEcECD56Bd43Bb66ee1B42dBEB754792C84"
+  - &l2WstETH "0x2C402BE58E5849c5413a79aa3b8aF3136e6C017F"
+  - &l2WstETHImpl "0x1008C85f796314c0985639b1a03083Be53eEf5aA"
+
+roles:
+  - &DEFAULT_ADMIN_ROLE "0x0000000000000000000000000000000000000000000000000000000000000000"
+  - &DEPOSITS_DISABLER_ROLE "0x63f736f21cb2943826cd50b191eb054ebbea670e4e962d0527611f830cd399d6"
+  - &DEPOSITS_ENABLER_ROLE "0x4b43b36766bde12c5e9cbbc37d15f8d1f769f08f54720ab370faeb4ce893753a"
+  - &WITHDRAWALS_DISABLER_ROLE "0x94a954c0bc99227eddbc0715a62a7e1056ed8784cd719c2303b685683908857c"
+  - &WITHDRAWALS_ENABLER_ROLE "0x9ab8816a3dc0b3849ec1ac00483f6ec815b07eee2fd766a353311c823ad59d0d"
+
+l1:
+  rpcUrl: https://ethereum-goerli.publicnode.com # url or env var
+  contracts:
+    tokenBridge:
+      name: L1ERC20TokenBridge
+      address: *l1TokenBridge
+      proxyName: OssifiableProxy
+      implementation: *l1TokenBridgeImpl
+      proxyChecks:
+        proxy__getImplementation: *l1TokenBridgeImpl
+        proxy__getAdmin: *agent
+        proxy__getIsOssified: false
+      checks:
+        isInitialized: true
+        isDepositsEnabled: true
+        isWithdrawalsEnabled: true
+        l1Token: *wstETH
+        l2Token: *l2WstETH
+        l2TokenBridge: *l2TokenBridge
+        messenger: *mantleL1CrossDomainMessenger
+        DEFAULT_ADMIN_ROLE: *DEFAULT_ADMIN_ROLE
+        DEPOSITS_DISABLER_ROLE: *DEPOSITS_DISABLER_ROLE
+        DEPOSITS_ENABLER_ROLE: *DEPOSITS_ENABLER_ROLE
+        WITHDRAWALS_DISABLER_ROLE: *WITHDRAWALS_DISABLER_ROLE
+        WITHDRAWALS_ENABLER_ROLE: *WITHDRAWALS_ENABLER_ROLE
+      implementationChecks:
+        isInitialized: true
+        isDepositsEnabled: false
+        isWithdrawalsEnabled: false
+        hasRole:
+          args: [*DEFAULT_ADMIN_ROLE, "0x0000000000000000000000000000000000000000"]
+          result: true
+      ozAcl:
+        *DEFAULT_ADMIN_ROLE : [*agent]
+        *DEPOSITS_DISABLER_ROLE : [*agent, *l1EmergencyBreaksMultisig]
+        *DEPOSITS_ENABLER_ROLE : [*agent]
+        *WITHDRAWALS_DISABLER_ROLE : [*agent, *l1EmergencyBreaksMultisig]
+        *WITHDRAWALS_ENABLER_ROLE : [*agent]
+
+l2:
+  rpcUrl: https://rpc.testnet.mantle.xyz # url or env var
+  contracts:
+    governanceExecutor:
+      name: OptimismBridgeExecutor
+      address: *l2GovernanceExecutor
+      checks:
+        getEthereumGovernanceExecutor: *agent
+        getGracePeriod: 86400
+        getGuardian: "0x0000000000000000000000000000000000000000"
+        getDelay: 0
+        getMinimumDelay: 0
+        getMaximumDelay: 1
+        getActionsSetCount: 0
+    wstETH:
+      name: ERC20Bridged
+      address: *l2WstETH
+      proxyName: OssifiableProxy
+      implementation: *l2WstETHImpl
+      proxyChecks:
+        proxy__getImplementation: *l2WstETHImpl
+        proxy__getAdmin: *l2GovernanceExecutor
+        proxy__getIsOssified: false
+      checks:
+        name: Wrapped liquid staked Ether 2.0
+        symbol: wstETH
+        decimals: 18
+        bridge: *l2TokenBridge
+        version: "1"
+      implementationChecks: {}
+    tokenBridge:
+      name: L2ERC20TokenBridge
+      address: *l2TokenBridge
+      proxyName: OssifiableProxy
+      implementation: *l2TokenBridgeImpl
+      proxyChecks:
+        proxy__getImplementation: *l2TokenBridgeImpl
+        proxy__getAdmin: *l2GovernanceExecutor
+        proxy__getIsOssified: false
+      checks:
+        isDepositsEnabled: true
+        isWithdrawalsEnabled: true
+        isInitialized: true
+        l1Token: *wstETH
+        l2Token: *l2WstETH
+        l1TokenBridge: *l1TokenBridge
+        messenger: *mantleL2CrossDomainMessenger
+        DEFAULT_ADMIN_ROLE: *DEFAULT_ADMIN_ROLE
+        DEPOSITS_DISABLER_ROLE: *DEPOSITS_DISABLER_ROLE
+        DEPOSITS_ENABLER_ROLE: *DEPOSITS_ENABLER_ROLE
+        WITHDRAWALS_DISABLER_ROLE: *WITHDRAWALS_DISABLER_ROLE
+        WITHDRAWALS_ENABLER_ROLE: *WITHDRAWALS_ENABLER_ROLE
+      implementationChecks:
+        isInitialized: true
+        isDepositsEnabled: false
+        isWithdrawalsEnabled: false
+        hasRole:
+          args: [*DEFAULT_ADMIN_ROLE, "0x0000000000000000000000000000000000000000"]
+          result: true
+      ozAcl:
+        *DEFAULT_ADMIN_ROLE : [*l2GovernanceExecutor]
+        *DEPOSITS_DISABLER_ROLE : [*l2GovernanceExecutor, *l2EmergencyBreaksMultisig]
+        *DEPOSITS_ENABLER_ROLE : [*l2GovernanceExecutor]
+        *WITHDRAWALS_DISABLER_ROLE : [*l2GovernanceExecutor, *l2EmergencyBreaksMultisig]
+        *WITHDRAWALS_ENABLER_ROLE : [*l2GovernanceExecutor]
