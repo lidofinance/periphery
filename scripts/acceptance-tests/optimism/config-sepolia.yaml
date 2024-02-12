@@ -28,7 +28,7 @@ roles:
 
 
 l1:
-  rpcUrl: https://sepolia.drpc.org # url or env var
+  rpcUrl: https://gateway.tenderly.co/public/sepolia # url or env var
   contracts:
     tokenBridge:
       name: L1ERC20TokenBridge
@@ -95,7 +95,6 @@ l2:
         symbol: wstETH
         decimals: 18
         bridge: *l2TokenBridge
-        version: "1"
       implementationChecks: {}
     tokenBridge:
       name: L2ERC20TokenBridge
