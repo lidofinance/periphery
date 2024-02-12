@@ -29,42 +29,42 @@ roles:
 
 l1:
   rpcUrl: https://sepolia.drpc.org # url or env var
-  contracts: []
-    # tokenBridge:
-    #   name: L1ERC20TokenBridge
-    #   address: *l1TokenBridge
-    #   proxyName: OssifiableProxy
-    #   implementation: *l1TokenBridgeImpl
-    #   proxyChecks:
-    #     proxy__getImplementation: *l1TokenBridgeImpl
-    #     proxy__getAdmin: *agent
-    #     proxy__getIsOssified: false
-    #   checks:
-    #     isInitialized: true
-    #     isDepositsEnabled: true
-    #     isWithdrawalsEnabled: true
-    #     l1Token: *wstETH
-    #     l2Token: *l2WstETH
-    #     l2TokenBridge: *l2TokenBridge
-    #     messenger: *sepoliaL1CrossDomainMessenger
-    #     DEFAULT_ADMIN_ROLE: *DEFAULT_ADMIN_ROLE
-    #     DEPOSITS_DISABLER_ROLE: *DEPOSITS_DISABLER_ROLE
-    #     DEPOSITS_ENABLER_ROLE: *DEPOSITS_ENABLER_ROLE
-    #     WITHDRAWALS_DISABLER_ROLE: *WITHDRAWALS_DISABLER_ROLE
-    #     WITHDRAWALS_ENABLER_ROLE: *WITHDRAWALS_ENABLER_ROLE
-    #   implementationChecks:
-    #     isInitialized: true
-    #     isDepositsEnabled: false
-    #     isWithdrawalsEnabled: false
-    #     hasRole:
-    #       args: [*DEFAULT_ADMIN_ROLE, "0x0000000000000000000000000000000000000000"]
-    #       result: true
-    #   ozAcl:
-    #     *DEFAULT_ADMIN_ROLE : [*agent]
-    #     *DEPOSITS_DISABLER_ROLE : [*agent, *l1EmergencyBreaksMultisig]
-    #     *DEPOSITS_ENABLER_ROLE : [*agent]
-    #     *WITHDRAWALS_DISABLER_ROLE : [*agent, *l1EmergencyBreaksMultisig]
-    #     *WITHDRAWALS_ENABLER_ROLE : [*agent]
+  contracts:
+    tokenBridge:
+      name: L1ERC20TokenBridge
+      address: *l1TokenBridge
+      proxyName: OssifiableProxy
+      implementation: *l1TokenBridgeImpl
+      proxyChecks:
+        proxy__getImplementation: *l1TokenBridgeImpl
+        proxy__getAdmin: *agent
+        proxy__getIsOssified: false
+      checks:
+        isInitialized: true
+        isDepositsEnabled: true
+        isWithdrawalsEnabled: true
+        l1Token: *wstETH
+        l2Token: *l2WstETH
+        l2TokenBridge: *l2TokenBridge
+        messenger: *sepoliaL1CrossDomainMessenger
+        DEFAULT_ADMIN_ROLE: *DEFAULT_ADMIN_ROLE
+        DEPOSITS_DISABLER_ROLE: *DEPOSITS_DISABLER_ROLE
+        DEPOSITS_ENABLER_ROLE: *DEPOSITS_ENABLER_ROLE
+        WITHDRAWALS_DISABLER_ROLE: *WITHDRAWALS_DISABLER_ROLE
+        WITHDRAWALS_ENABLER_ROLE: *WITHDRAWALS_ENABLER_ROLE
+      implementationChecks:
+        isInitialized: true
+        isDepositsEnabled: false
+        isWithdrawalsEnabled: false
+        hasRole:
+          args: [*DEFAULT_ADMIN_ROLE, "0x0000000000000000000000000000000000000000"]
+          result: true
+      ozAcl:
+        *DEFAULT_ADMIN_ROLE : [*agent]
+        *DEPOSITS_DISABLER_ROLE : [*agent, *l1EmergencyBreaksMultisig]
+        *DEPOSITS_ENABLER_ROLE : [*agent]
+        *WITHDRAWALS_DISABLER_ROLE : [*agent, *l1EmergencyBreaksMultisig]
+        *WITHDRAWALS_ENABLER_ROLE : [*agent]
 
 
 l2:
