@@ -149,6 +149,7 @@ l1:
         owner: *ZERO_ADDRESS
         router: *l1ScrollGatewayRouter
         hasRole: null
+        getRoleMember: null
 
 l2:
   rpcUrl: https://rpc.scroll.io # url or env var
@@ -227,11 +228,16 @@ l2:
         gateway: *ZERO_ADDRESS
         decimals: 0
         totalSupply: 0
+        DOMAIN_SEPARATOR: null  # TODO
+        allowance: null
+        balanceOf: null
+        eip712Domain: null  # TODO
+        nonces: null
     tokenBridge:
       name: L2LidoGateway
       address: *l2TokenBridge
       proxyName: TransparentUpgradeableProxy
-      implementation: *l2TokenBridgeImpl  # TODO: after pre-tx is executed
+      implementation: *l2TokenBridgeImpl
       checks:
         DEPOSITS_DISABLER_ROLE: *DEPOSITS_DISABLER_ROLE
         DEPOSITS_ENABLER_ROLE: *DEPOSITS_ENABLER_ROLE
@@ -314,3 +320,4 @@ l2:
         owner: *ZERO_ADDRESS
         router: *l2ScrollGatewayRouter
         hasRole: null
+        getRoleMember: null

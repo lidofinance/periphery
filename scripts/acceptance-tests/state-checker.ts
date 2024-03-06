@@ -219,21 +219,42 @@ function getNonMutableFunctionNames(abi: Abi) {
   return result;
 }
 
+function reportNonCoveredNonMutableChecks(
+  contractAlias: string,
+  checksType: string,
+  contractName: string,
+  checks: string[],
+) {
+  const nonMutableFromAbi = getNonMutableFunctionNames(loadAbi(contractName));
+  const nonCovered = nonMutableFromAbi.filter((x) => !checks.includes(x));
+  if (nonCovered.length) {
+    logError(
+      `Section ${contractAlias} ${checksType} does not cover these non-mutable function from ABI: ${nonCovered}`,
+    );
+    process.exit(1);
+  }
+}
+
 async function checkNetworkSection(section: NetworkSection) {
   const rpcUrl = isUrl(section.rpcUrl) ? section.rpcUrl : process.env[section.rpcUrl];
   const provider = new JsonRpcProvider(rpcUrl);
   for (const contractAlias in section.contracts) {
     const entry = section.contracts[contractAlias];
+    log(`\n====== Contract: ${contractAlias} (${entry.name}, ${entry.address}) ======`);
 
-    const nonMutableFromAbi = getNonMutableFunctionNames(loadAbi(entry.name));
-    const nonMutableFromConfig = Object.keys(entry.checks);
-    const nonCovered = nonMutableFromAbi.filter((x) => !nonMutableFromConfig.includes(x));
-    if (nonCovered.length) {
-      logError(`Section ${contractAlias} does not cover these non-mutable function from ABI: ${nonCovered}`);
-      process.exit(1);
+    reportNonCoveredNonMutableChecks(contractAlias, "checks", entry.name, Object.keys(entry.checks));
+    if (entry.proxyName) {
+      reportNonCoveredNonMutableChecks(contractAlias, "proxyChecks", entry.proxyName, Object.keys(entry.proxyChecks));
+    }
+    if (entry.implementationChecks) {
+      reportNonCoveredNonMutableChecks(
+        contractAlias,
+        "implementationChecks",
+        entry.name,
+        Object.keys(entry.implementationChecks),
+      );
     }
 
-    log(`\n====== Contract: ${contractAlias} (${entry.name}, ${entry.address}) ======`);
     await checkProxyOrRegularEntry(entry, provider);
   }
 }
