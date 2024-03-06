@@ -1,8 +1,7 @@
 import { expect } from "chai";
 import { readFileSync } from "fs";
 import { parse as parseYaml } from "yaml";
-import { BaseContract, Contract, JsonRpcProvider } from "ethers";
-import { isAddress } from "ethers";
+import { BaseContract, Contract, JsonRpcProvider, isAddress, getAddress } from "ethers";
 
 const SUCCESS_MARK = "✔";
 const FAILURE_MARK = "❌";
@@ -17,7 +16,7 @@ type Checks = {
   [key: string]: ChecksEntryValue;
 };
 
-type OzAcl = {
+type OzNonEnumerableAcl = {
   [key: string]: [string];
 };
 
@@ -25,7 +24,7 @@ type RegularContractEntry = {
   address: string;
   name: string;
   checks: Checks;
-  ozAcl?: OzAcl;
+  ozNonEnumerableAcl?: OzNonEnumerableAcl;
 };
 
 type ProxyContractEntry = RegularContractEntry & {
@@ -41,6 +40,14 @@ type NetworkSection = {
     [key: string]: ProxyContractEntry;
   };
 };
+
+type Abi = [
+  {
+    name: string;
+    type: string;
+    stateMutability: string;
+  },
+];
 
 // ==== GLOBAL VARIABLES ====
 let g_abiDirectory: string;
@@ -75,9 +82,13 @@ class LogCommand {
   }
 }
 
+function loadAbi(contractName: string) {
+  return JSON.parse(readFileSync(`${g_abiDirectory}/${contractName}.json`).toString());
+}
+
 async function loadContract(contractName: string, address: string, provider: JsonRpcProvider) {
-  const abi = JSON.parse(readFileSync(`${g_abiDirectory}/${contractName}.json`).toString());
-  return new Contract(address, abi, provider) as BaseContract;
+  const abi = loadAbi(contractName);
+  return new Contract(address, abi, provider);
 }
 
 function isUrl(maybeUrl: string) {
@@ -89,7 +100,19 @@ function isUrl(maybeUrl: string) {
   }
 }
 
-async function checkConfigEntry({ address, name, checks, ozAcl }: RegularContractEntry, provider: JsonRpcProvider) {
+function log(arg: unknown) {
+  console.log(arg);
+}
+
+function logError(arg: unknown) {
+  console.error(arg);
+}
+
+async function checkConfigEntry(
+  { address, name, checks, ozNonEnumerableAcl }: RegularContractEntry,
+  provider: JsonRpcProvider,
+) {
+  // TODO: make chai keeping full addresses in the error message
   expect(isAddress(address), `${address} is invalid address`).to.be.true;
   const contract: BaseContract = await loadContract(name, address, provider);
   for (const [method, checkEntryValue] of Object.entries(checks)) {
@@ -102,12 +125,18 @@ async function checkConfigEntry({ address, name, checks, ozAcl }: RegularContrac
     }
   }
 
-  if (ozAcl) {
-    for (const role in ozAcl) {
-      for (const holder of ozAcl[role]) {
+  if (ozNonEnumerableAcl) {
+    log(`=== Non-enumerable OZ Acl checks ===`);
+    for (const role in ozNonEnumerableAcl) {
+      for (const holder of ozNonEnumerableAcl[role]) {
         const isRoleOnHolder = await contract.getFunction("hasRole").staticCall(role, holder);
-        console.log(`.hasRole(${role}, ${holder}): ${isRoleOnHolder}`);
-        expect(isRoleOnHolder).to.be.true;
+        const logHandle = new LogCommand(`.hasRole(${role}, ${holder})`);
+        try {
+          expect(isRoleOnHolder).to.be.true;
+          logHandle.success(`${isRoleOnHolder}`);
+        } catch (error) {
+          logHandle.failure(`REVERTED with: ${(error as Error).message}`);
+        }
       }
     }
   }
@@ -121,6 +150,9 @@ async function checkViewFunction(contract: BaseContract, method: string, expecte
     expected = expectedOrObject.result;
     args = expectedOrObject.args;
     mustRevert = expectedOrObject.mustRevert || false;
+  } else if (expectedOrObject === null) {
+    log(`· ${method}: skipped`);
+    return;
   } else {
     expected = expectedOrObject as ViewResult;
   }
@@ -134,8 +166,12 @@ async function checkViewFunction(contract: BaseContract, method: string, expecte
     if (typeof actual === "bigint" && typeof expected === "number") {
       expected = BigInt(expected);
     }
+    if (typeof expected === "string" && isAddress(expected)) {
+      expect(getAddress(actual)).to.equal(getAddress(expected));
+    } else {
+      expect(actual).to.equal(expected);
+    }
     logHandle.success(actual.toString());
-    expect(actual).to.equal(expected);
   } catch (error) {
     if (mustRevert) {
       logHandle.success(`REVERTED with: ${(error as Error).message}`);
@@ -149,6 +185,7 @@ async function checkProxyOrRegularEntry(entry: ProxyContractEntry | RegularContr
   await checkConfigEntry(entry, provider);
 
   if ("proxyChecks" in entry) {
+    log(`=== Proxy checks ===`);
     await checkConfigEntry(
       {
         checks: entry.proxyChecks,
@@ -160,6 +197,7 @@ async function checkProxyOrRegularEntry(entry: ProxyContractEntry | RegularContr
   }
 
   if ("implementationChecks" in entry) {
+    log(`=== Implementation checks ===`);
     await checkConfigEntry(
       {
         checks: entry.implementationChecks,
@@ -171,12 +209,31 @@ async function checkProxyOrRegularEntry(entry: ProxyContractEntry | RegularContr
   }
 }
 
+function getNonMutableFunctionNames(abi: Abi) {
+  const result = [];
+  for (const e of abi) {
+    if (e.type == "function" && !["payable", "nonpayable"].includes(e.stateMutability)) {
+      result.push(e.name);
+    }
+  }
+  return result;
+}
+
 async function checkNetworkSection(section: NetworkSection) {
   const rpcUrl = isUrl(section.rpcUrl) ? section.rpcUrl : process.env[section.rpcUrl];
   const provider = new JsonRpcProvider(rpcUrl);
   for (const contractAlias in section.contracts) {
     const entry = section.contracts[contractAlias];
-    console.log(`\n====== Contract: ${contractAlias} (${entry.name}) ======`);
+
+    const nonMutableFromAbi = getNonMutableFunctionNames(loadAbi(entry.name));
+    const nonMutableFromConfig = Object.keys(entry.checks);
+    const nonCovered = nonMutableFromAbi.filter((x) => !nonMutableFromConfig.includes(x));
+    if (nonCovered.length) {
+      logError(`Section ${contractAlias} does not cover these non-mutable function from ABI: ${nonCovered}`);
+      process.exit(1);
+    }
+
+    log(`\n====== Contract: ${contractAlias} (${entry.name}, ${entry.address}) ======`);
     await checkProxyOrRegularEntry(entry, provider);
   }
 }
@@ -188,16 +245,16 @@ export async function main() {
   const configContent = readFileSync(deploymentFile).toString();
   const config = parseYaml(configContent);
 
-  console.log(`\n============================ CONFIG ============================`);
-  console.log(configContent);
+  // log(`\n============================ CONFIG ============================`);
+  // log(configContent);
 
   if (config.l1) {
-    console.log(`\n============================== L1 ==============================`);
+    log(`\n============================== L1 ==============================`);
     await checkNetworkSection(config.l1);
   }
 
   if (config.l2) {
-    console.log(`\n============================== L2 ==============================`);
+    log(`\n============================== L2 ==============================`);
     await checkNetworkSection(config.l2);
   }
 }

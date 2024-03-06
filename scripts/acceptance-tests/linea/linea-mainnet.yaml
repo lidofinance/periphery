@@ -30,7 +30,6 @@ deployed:
 
 l1:
   rpcUrl: L1_RPC_URL # https://ethereum.publicnode.com # url or env var
-  explorerToken: FRUPKEUVDMVPCKAU2XFT171FYC5EVAC8R9
   contracts:
     proxyAdmin:
       name: ProxyAdmin

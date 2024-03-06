@@ -1,0 +1,316 @@
+# Scroll Mainnet Deployment & Configuration
+# https://docs.scroll.io/en/developers/scroll-contracts/
+
+parameters:
+# Already deployed contracts or other parameters
+  - &wstETH "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
+  - &agent "0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c"
+  - &l2WstETH "0xf610A9dfB7C89644979b4A0f27063E9e7d7Cda32"
+  - &l2WstETHImpl "0x38224D52ecC979aEdfEb31b1EEa0cfCEbd55247e"
+  - &l1TokenBridge "0x6625c6332c9f91f2d27c304e729b86db87a3f504"
+  - &l1TokenBridgeImpl "0xF4f2066EE72D62e3caF9678459149BA7FCf2262F"
+  - &l2TokenBridge "0x8aE8f22226B9d789A36AC81474e633f8bE2856c9"
+  - &l2TokenBridgeImpl "0x2B9beB2890DBeFC7cA25Af3164100d139B623C24"
+
+
+misc:
+  - &ZERO_ADDRESS "0x0000000000000000000000000000000000000000"
+  - &l1ScrollOwner "0x798576400F7D662961BA15C6b3F3d813447a26a6"
+  - &l2ScrollOwner "0x13d24a7ff6f5ec5ff0e9c40fc3b8c9c01c65437b"
+  - &l1ScrollGatewayRouter "0xF8B1378579659D8F7EE5f3C929c2f3E332E41Fd6"
+  - &l2ScrollGatewayRouter "0x4c0926ff5252a435fd19e10ed15e5a249ba19d79"
+  - &l2ScrollMessenger "0x781e90f1c8fc4611c9b7497c3b47f99ef6969cbc"
+  - &l1ScrollMessenger "0x6774Bcbd5ceCeF1336b5300fb5186a12DDD8b367"
+
+
+deployed:
+# Newly deployed contracts
+  - &l1EmergencyBreaksMultisig "0x73b047fe6337183A454c5217241D780a932777bD"
+  - &l2EmergencyBreaksMultisig "0xF580753E334687C0d6b88EF563a258f048384Ee6"
+  - &l1ProxyAdmin "0xCC2C53556Bc75217cf698721b29071d6f12628A9"
+  - &l1ProxyAdminInterim "0xEB803eb3F501998126bf37bB823646Ed3D59d072"
+  - &l2ProxyAdmin "0x8e34D07Eb348716a1f0a48A507A9de8a3A6DcE45"
+  - &l2ProxyAdminInterim "0xA76acF000C890b0DD7AEEf57627d9899F955d026"
+  - &l2GovernanceExecutor "0x0c67D8D067E349669dfEAB132A7c03A90594eE09"
+
+roles:
+  - &DEFAULT_ADMIN_ROLE "0x0000000000000000000000000000000000000000000000000000000000000000"
+  - &DEPOSITS_DISABLER_ROLE "0x63f736f21cb2943826cd50b191eb054ebbea670e4e962d0527611f830cd399d6"
+  - &DEPOSITS_ENABLER_ROLE "0x4b43b36766bde12c5e9cbbc37d15f8d1f769f08f54720ab370faeb4ce893753a"
+  - &WITHDRAWALS_DISABLER_ROLE "0x94a954c0bc99227eddbc0715a62a7e1056ed8784cd719c2303b685683908857c"
+  - &WITHDRAWALS_ENABLER_ROLE "0x9ab8816a3dc0b3849ec1ac00483f6ec815b07eee2fd766a353311c823ad59d0d"
+
+
+l1:
+  rpcUrl: https://eth.drpc.org # L1_RPC_URL # https://ethereum.publicnode.com # url or env var
+  contracts:
+    proxyAdminInterim:
+      name: ProxyAdmin
+      address: *l1ProxyAdminInterim
+      checks:
+        owner: *l1ScrollOwner
+        getProxyAdmin:
+          - args: [*l1TokenBridge]
+            result: *l1ProxyAdminInterim
+        getProxyImplementation:
+          - args: [*l1TokenBridge]
+            result: *l1TokenBridgeImpl
+    proxyAdmin:
+      name: ProxyAdmin
+      address: *l1ProxyAdmin
+      checks:
+        owner: *agent
+        getProxyAdmin:
+          - mustRevert: true  # TODO: must not revert after the admin role is passed
+            args: [*l1TokenBridge]
+            result: *agent
+        getProxyImplementation:
+          - mustRevert: true  # TODO: must not revert after the admin role is passed
+            args: [*l1TokenBridge]
+            result: *l1TokenBridgeImpl
+    tokenBridge:
+      name: L1LidoGateway
+      address: *l1TokenBridge
+      proxyName: TransparentUpgradeableProxy
+      implementation: *l1TokenBridgeImpl
+      checks:
+        DEPOSITS_DISABLER_ROLE: *DEPOSITS_DISABLER_ROLE
+        DEPOSITS_ENABLER_ROLE: *DEPOSITS_ENABLER_ROLE
+        WITHDRAWALS_DISABLER_ROLE: *WITHDRAWALS_DISABLER_ROLE
+        WITHDRAWALS_ENABLER_ROLE: *WITHDRAWALS_ENABLER_ROLE
+        counterpart: *l2TokenBridge
+        getL2ERC20Address:
+          - args: [*wstETH]
+            result: *l2WstETH
+        getRoleMemberCount:
+          - args: [*DEFAULT_ADMIN_ROLE]
+            result: 0
+          - args: [*DEPOSITS_DISABLER_ROLE]
+            result: 2
+          - args: [*WITHDRAWALS_DISABLER_ROLE]
+            result: 2
+          - args: [*DEPOSITS_ENABLER_ROLE]
+            result: 1
+          - args: [*WITHDRAWALS_ENABLER_ROLE]
+            result: 1
+        getRoleMember:
+          - args: [*DEPOSITS_DISABLER_ROLE, 0]
+            result: *agent
+          - args: [*DEPOSITS_DISABLER_ROLE, 1]
+            result: *l1EmergencyBreaksMultisig
+          - args: [*WITHDRAWALS_DISABLER_ROLE, 0]
+            result: *agent
+          - args: [*WITHDRAWALS_DISABLER_ROLE, 1]
+            result: *l1EmergencyBreaksMultisig
+          - args: [*DEPOSITS_ENABLER_ROLE, 0]
+            result: *agent
+          - args: [*DEPOSITS_ENABLER_ROLE, 0]
+            result: *agent
+        isDepositsEnabled: true
+        isWithdrawalsEnabled: true
+        l1Token: *wstETH
+        l2Token: *l2WstETH
+        messenger: *l1ScrollMessenger
+        owner: *agent
+        router: *l1ScrollGatewayRouter
+        hasRole: null
+      ozNonEnumerableAcl:
+        *DEFAULT_ADMIN_ROLE : []
+        *DEPOSITS_DISABLER_ROLE : [*agent, *l1EmergencyBreaksMultisig]
+        *DEPOSITS_ENABLER_ROLE : [*agent]
+        *WITHDRAWALS_DISABLER_ROLE : [*agent, *l1EmergencyBreaksMultisig]
+        *WITHDRAWALS_ENABLER_ROLE : [*agent]
+      proxyChecks: {}  # See checks for proxyAdmin contract, due to transparent proxy pattern
+      implementationChecks:
+        DEPOSITS_DISABLER_ROLE: *DEPOSITS_DISABLER_ROLE
+        DEPOSITS_ENABLER_ROLE: *DEPOSITS_ENABLER_ROLE
+        WITHDRAWALS_DISABLER_ROLE: *WITHDRAWALS_DISABLER_ROLE
+        WITHDRAWALS_ENABLER_ROLE: *WITHDRAWALS_ENABLER_ROLE
+        counterpart: *l2TokenBridge
+        getL2ERC20Address:
+          - args: [*wstETH]
+            result: *l2WstETH
+        getRoleMemberCount:
+          - args: [*DEFAULT_ADMIN_ROLE]
+            result: 0
+          - args: [*DEPOSITS_DISABLER_ROLE]
+            result: 0
+          - args: [*WITHDRAWALS_DISABLER_ROLE]
+            result: 0
+          - args: [*DEPOSITS_ENABLER_ROLE]
+            result: 0
+          - args: [*WITHDRAWALS_ENABLER_ROLE]
+            result: 0
+        isDepositsEnabled: false
+        isWithdrawalsEnabled: false
+        l1Token: *wstETH
+        l2Token: *l2WstETH
+        messenger: *l1ScrollMessenger
+        owner: *ZERO_ADDRESS
+        router: *l1ScrollGatewayRouter
+        hasRole: null
+
+l2:
+  rpcUrl: https://rpc.scroll.io # url or env var
+  contracts:
+    governanceExecutor:
+      name: ScrollBridgeExecutor
+      address: *l2GovernanceExecutor
+      checks:
+        L2_SCROLL_MESSENGER: *l2ScrollMessenger
+        getActionsSetCount: 0
+        getDelay: 0
+        getEthereumGovernanceExecutor: *agent
+        getGracePeriod: 86400
+        getGuardian: *ZERO_ADDRESS
+        getMinimumDelay: 0
+        getMaximumDelay: 1
+        getActionsSetById: null
+        getCurrentState: null
+        isActionQueued: null
+    proxyAdminInterim:
+      name: ProxyAdmin
+      address: *l2ProxyAdminInterim
+      checks:
+        owner: *l2ScrollOwner
+        getProxyAdmin:
+          - args: [*l2WstETH]
+            result: *l2ProxyAdminInterim
+          - args: [*l2TokenBridge]
+            result: *l2ProxyAdminInterim
+        getProxyImplementation:
+          - args: [*l2WstETH]
+            result: *l2WstETHImpl
+          - args: [*l2TokenBridge]
+            result: *l2TokenBridgeImpl
+    proxyAdmin:
+      name: ProxyAdmin
+      address: *l2ProxyAdmin
+      checks:
+        owner: *l2GovernanceExecutor
+        getProxyAdmin:
+          - args: [*l2WstETH]
+            mustRevert: true  # TODO: must not revert after the admin role is passed
+            result: *l2GovernanceExecutor
+          - args: [*l2TokenBridge]
+            mustRevert: true  # TODO: must not revert after the admin role is passed
+            result: *l2GovernanceExecutor
+        getProxyImplementation:
+          - args: [*l2WstETH]
+            mustRevert: true  # TODO: must not revert after the admin role is passed
+            result: *l2WstETHImpl
+          - args: [*l2TokenBridge]
+            mustRevert: true  # TODO: must not revert after the admin role is passed
+            result: *l2TokenBridgeImpl
+    wstETH:
+      name: ScrollStandardERC20
+      address: *l2WstETH
+      proxyName: TransparentUpgradeableProxy
+      implementation: *l2WstETHImpl
+      checks:
+        name: Wrapped liquid staked Ether 2.0
+        symbol: wstETH
+        counterpart: *wstETH
+        gateway: *l2TokenBridge
+        decimals: 18
+        DOMAIN_SEPARATOR: "0x7ea5e6f23fd742b512a890cc64bcc4f1a466bacce8c83108554b76ceec5f6ca8"  # TODO: comment
+        allowance: null
+        balanceOf: null
+        eip712Domain: null  # TODO
+        nonces: null
+        totalSupply: null
+      proxyChecks: {}  # See checks for proxyAdmin contract, due to transparent proxy pattern
+      implementationChecks:
+        name: ""
+        symbol: ""
+        counterpart: *ZERO_ADDRESS
+        gateway: *ZERO_ADDRESS
+        decimals: 0
+        totalSupply: 0
+    tokenBridge:
+      name: L2LidoGateway
+      address: *l2TokenBridge
+      proxyName: TransparentUpgradeableProxy
+      implementation: *l2TokenBridgeImpl  # TODO: after pre-tx is executed
+      checks:
+        DEPOSITS_DISABLER_ROLE: *DEPOSITS_DISABLER_ROLE
+        DEPOSITS_ENABLER_ROLE: *DEPOSITS_ENABLER_ROLE
+        WITHDRAWALS_DISABLER_ROLE: *WITHDRAWALS_DISABLER_ROLE
+        WITHDRAWALS_ENABLER_ROLE: *WITHDRAWALS_ENABLER_ROLE
+        counterpart: *l1TokenBridge
+        getL1ERC20Address:
+          - args: [*l2WstETH]
+            result: *wstETH
+        getL2ERC20Address:
+          - args: [*wstETH]
+            result: *l2WstETH
+        getRoleMemberCount:
+          - args: [*DEFAULT_ADMIN_ROLE]
+            result: 0
+          - args: [*DEPOSITS_DISABLER_ROLE]
+            result: 2
+          - args: [*WITHDRAWALS_DISABLER_ROLE]
+            result: 2
+          - args: [*DEPOSITS_ENABLER_ROLE]
+            result: 1
+          - args: [*WITHDRAWALS_ENABLER_ROLE]
+            result: 1
+        getRoleMember:
+          - args: [*DEPOSITS_DISABLER_ROLE, 0]
+            result: *l2GovernanceExecutor
+          - args: [*DEPOSITS_DISABLER_ROLE, 1]
+            result: *l2EmergencyBreaksMultisig
+          - args: [*WITHDRAWALS_DISABLER_ROLE, 0]
+            result: *l2GovernanceExecutor
+          - args: [*WITHDRAWALS_DISABLER_ROLE, 1]
+            result: *l2EmergencyBreaksMultisig
+          - args: [*DEPOSITS_ENABLER_ROLE, 0]
+            result: *l2GovernanceExecutor
+          - args: [*DEPOSITS_ENABLER_ROLE, 0]
+            result: *l2GovernanceExecutor
+        isDepositsEnabled: true
+        isWithdrawalsEnabled: true
+        l1Token: *wstETH
+        l2Token: *l2WstETH
+        messenger: *l2ScrollMessenger
+        owner: *l2GovernanceExecutor
+        router: *l2ScrollGatewayRouter
+        hasRole: null
+      ozNonEnumerableAcl:
+        *DEFAULT_ADMIN_ROLE : []
+        *DEPOSITS_DISABLER_ROLE : [*l2GovernanceExecutor, *l2EmergencyBreaksMultisig]
+        *DEPOSITS_ENABLER_ROLE : [*l2GovernanceExecutor]
+        *WITHDRAWALS_DISABLER_ROLE : [*l2GovernanceExecutor, *l2EmergencyBreaksMultisig]
+        *WITHDRAWALS_ENABLER_ROLE : [*l2GovernanceExecutor]
+      proxyChecks: {}  # See checks for proxyAdmin contract, due to transparent proxy pattern
+      implementationChecks:
+        DEPOSITS_DISABLER_ROLE: *DEPOSITS_DISABLER_ROLE
+        DEPOSITS_ENABLER_ROLE: *DEPOSITS_ENABLER_ROLE
+        WITHDRAWALS_DISABLER_ROLE: *WITHDRAWALS_DISABLER_ROLE
+        WITHDRAWALS_ENABLER_ROLE: *WITHDRAWALS_ENABLER_ROLE
+        counterpart: *l1TokenBridge
+        getL1ERC20Address:
+          - args: [*l2WstETH]
+            result: *wstETH
+        getL2ERC20Address:
+          - args: [*wstETH]
+            result: *l2WstETH
+        getRoleMemberCount:
+          - args: [*DEFAULT_ADMIN_ROLE]
+            result: 0
+          - args: [*DEPOSITS_DISABLER_ROLE]
+            result: 0
+          - args: [*WITHDRAWALS_DISABLER_ROLE]
+            result: 0
+          - args: [*DEPOSITS_ENABLER_ROLE]
+            result: 0
+          - args: [*WITHDRAWALS_ENABLER_ROLE]
+            result: 0
+        isDepositsEnabled: false
+        isWithdrawalsEnabled: false
+        l1Token: *wstETH
+        l2Token: *l2WstETH
+        messenger: *l2ScrollMessenger
+        owner: *ZERO_ADDRESS
+        router: *l2ScrollGatewayRouter
+        hasRole: null
