@@ -60,7 +60,8 @@
     "solidity-coverage": "^0.8.0",
     "ts-node": ">=8.0.0",
     "typechain": "^8.3.1",
-    "typescript": "^5.2.2"
+    "typescript": "^5.2.2",
+    "yaml": "^2.3.4"
   },
   "dependencies": {
     "@aragon/apps-agent": "2.1.0",

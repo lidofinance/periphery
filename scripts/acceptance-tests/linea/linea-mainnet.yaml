@@ -1,0 +1,131 @@
+# Linea Mainnet Deployment & Configuration
+
+parameters:
+# Already deployed contracts or other parameters
+  - &wstETH "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
+  - &agent "0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c"
+  - &l1MessageService "0xd19d4B5d358258f05D7B411E21A1460D11B0876F" # https://support.linea.build/hc/en-us/articles/20597805711387-Using-the-Linea-bridge-through-the-block-explorer
+  - &l1TokenBridge "0x051F1D88f0aF5763fB888eC4378b4D8B29ea3319" # canonical general bridge
+  - &l1TokenBridgeImpl "0x6ccfD65b0b14F67259C77Ca6267104e058dDB292"
+  - &l2MessageService "0x508Ca82Df566dCD1B0DE8296e70a96332cD644ec" # https://support.linea.build/hc/en-us/articles/20597805711387-Using-the-Linea-bridge-through-the-block-explorer
+  - &l2TokenBridge "0x353012dc4a9A6cF55c941bADC267f82004A8ceB9" # canonical general bridge
+  - &l2TokenBridgeImpl "0x2bfdf4a0d54C93a4bAF74F8DcEA8a275D8EE97a9"
+  - &lineaRollupAdminL1Multisig "0x892bb7EeD71efB060ab90140e7825d8127991DD3" # https://l2beat.com/scaling/projects/linea#permissions
+  - &lineaRollupAdminL2Multisig "0xf5cc7604a5ef3565b4D2050D65729A06B68AA0bD" # https://l2beat.com/scaling/projects/linea#permissions
+  - &l1TokenBridgeProxyAdmin "0x5B0bb17755FBa06028530682E2FD5bc373931768"
+
+misc:
+  - &ZERO_ADDRESS "0x0000000000000000000000000000000000000000"
+  - &MAINNET_CHAIN_ID 1
+  - &LINEA_CHAIN_ID 59144
+  - &NATIVE_STATUS "0x0000000000000000000000000000000000000222" # https://github.com/Consensys/linea-contracts/blob/3cf85529fd4539eb06ba998030c37e47f98c528a/contracts/tokenBridge/TokenBridge.sol#L59
+
+deployed:
+# Newly deployed contracts
+  - &l2WstETHProxyAdmin "0xF951d7592e03eDB0Bab3D533935e678Ce64Eb927"
+  - &l2GovernanceExecutor "0x74Be82F00CC867614803ffd7f36A2a4aF0405670"
+  - &l2WstETH "0xB5beDd42000b71FddE22D3eE8a79Bd49A568fC8F"
+  - &l2WstETHImpl "0xc0583e2F5930EDE5Fab9D57bAC4169878730B010"
+
+
+l1:
+  rpcUrl: L1_RPC_URL # https://ethereum.publicnode.com # url or env var
+  contracts:
+    proxyAdmin:
+      name: ProxyAdmin
+      address: *l1TokenBridgeProxyAdmin
+      checks:
+        owner: *lineaRollupAdminL1Multisig
+        getProxyAdmin:
+          args: [*l1TokenBridge]
+          result: *l1TokenBridgeProxyAdmin
+        getProxyImplementation:
+          args: [*l1TokenBridge]
+          result: *l1TokenBridgeImpl
+    tokenBridge:
+      name: TokenBridge
+      address: *l1TokenBridge
+      proxyName: TransparentUpgradeableProxy
+      implementation: *l1TokenBridgeImpl
+      proxyChecks: {}
+      checks:
+        owner: *lineaRollupAdminL1Multisig
+        pendingOwner: *ZERO_ADDRESS
+        remoteSender: *l2TokenBridge
+        paused: false
+        sourceChainId: *MAINNET_CHAIN_ID
+        messageService: *l1MessageService
+        bridgedToNativeToken:
+          args: [*l2WstETH]
+          result: *ZERO_ADDRESS # zero expected because token bridged from L1 to L2
+        nativeToBridgedToken:
+          args: [*MAINNET_CHAIN_ID, *wstETH]
+          result: *NATIVE_STATUS # "native" is expected, although it is still not fully correct and should be "deployed"
+      implementationChecks: {} # no need to dig too deep into the pre-existing canonical bridge
+
+l2:
+  rpcUrl: https://rpc.linea.build # url or env var
+  contracts:
+    governanceExecutor:
+      name: LineaBridgeExecutor
+      address: *l2GovernanceExecutor
+      checks:
+        getEthereumGovernanceExecutor: *agent
+        LINEA_MESSAGE_SERVICE: *l2MessageService
+        getGracePeriod: 86400
+        getGuardian: *ZERO_ADDRESS
+        getDelay: 0
+        getMinimumDelay: 0
+        getMaximumDelay: 1
+        getActionsSetCount: 0
+    proxyAdmin:
+      name: ProxyAdmin
+      address: *l2WstETHProxyAdmin
+      checks:
+        owner: *l2GovernanceExecutor
+        getProxyAdmin:
+          args: [*l2WstETH]
+          mustRevert: true
+          result: null
+        getProxyImplementation:
+          args: [*l2WstETH]
+          mustRevert: true
+          result: *l2WstETHImpl
+    wstETH:
+      name: CustomBridgedToken
+      address: *l2WstETH
+      proxyName: TransparentOssifiableProxy
+      implementation: *l2WstETHImpl
+      proxyChecks: {}
+      checks:
+        name: Wrapped liquid staked Ether 2.0
+        symbol: wstETH
+        _decimals: 18
+        decimals: 18
+        bridge: *l2TokenBridge
+      implementationChecks:
+        name: ""
+        symbol: ""
+        _decimals: 0
+        decimals: 0
+        bridge: *ZERO_ADDRESS
+    tokenBridge:
+      name: TokenBridge
+      address: *l2TokenBridge
+      proxyName: TransparentUpgradeableProxy
+      implementation: *l2TokenBridgeImpl
+      proxyChecks: {}
+      checks:
+        owner: *lineaRollupAdminL2Multisig
+        pendingOwner: *ZERO_ADDRESS
+        remoteSender: *l1TokenBridge
+        paused: false
+        sourceChainId: *LINEA_CHAIN_ID
+        messageService: *l2MessageService
+        bridgedToNativeToken:
+          args: [*l2WstETH]
+          result: *wstETH
+        nativeToBridgedToken:
+          args: [*MAINNET_CHAIN_ID, *wstETH]
+          result: *l2WstETH
+      implementationChecks: {} # no need to dig too deep into the pre-existing canonical bridge
