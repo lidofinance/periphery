@@ -8,7 +8,6 @@ parameters:
   - &sepoliaL1CrossDomainMessenger "0x58Cc85b8D04EA49cC6DBd3CbFFd00B4B8D6cb3ef" # https://docs.optimism.io/chain/addresses#testnet-sepolia
   - &sepoliaL2CrossDomainMessenger "0x4200000000000000000000000000000000000007" # https://docs.optimism.io/chain/addresses#testnet-sepolia
 
-
 deployed:
   - &l2GovernanceExecutor "0xf695357C66bA514150Da95b189acb37b46DDe602"
   - &l1TokenBridge "0x4Abf633d9c0F4aEebB4C2E3213c7aa1b8505D332"
@@ -18,14 +17,12 @@ deployed:
   - &l2WstETH "0x24B47cd3A74f1799b32B2de11073764Cb1bb318B"
   - &l2WstETHImpl "0xaB0c6F1015b644c252064155759Cdc90a6CBd50d"
 
-
 roles:
   - &DEFAULT_ADMIN_ROLE "0x0000000000000000000000000000000000000000000000000000000000000000"
   - &DEPOSITS_DISABLER_ROLE "0x63f736f21cb2943826cd50b191eb054ebbea670e4e962d0527611f830cd399d6"
   - &DEPOSITS_ENABLER_ROLE "0x4b43b36766bde12c5e9cbbc37d15f8d1f769f08f54720ab370faeb4ce893753a"
   - &WITHDRAWALS_DISABLER_ROLE "0x94a954c0bc99227eddbc0715a62a7e1056ed8784cd719c2303b685683908857c"
   - &WITHDRAWALS_ENABLER_ROLE "0x9ab8816a3dc0b3849ec1ac00483f6ec815b07eee2fd766a353311c823ad59d0d"
-
 
 l1:
   rpcUrl: https://gateway.tenderly.co/public/sepolia # url or env var
@@ -65,7 +62,6 @@ l1:
         *DEPOSITS_ENABLER_ROLE : [*agent]
         *WITHDRAWALS_DISABLER_ROLE : [*agent, *l1EmergencyBreaksMultisig]
         *WITHDRAWALS_ENABLER_ROLE : [*agent]
-
 
 l2:
   rpcUrl: https://sepolia.optimism.io # url or env var

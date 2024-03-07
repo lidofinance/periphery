@@ -2,7 +2,7 @@
 # https://docs.scroll.io/en/developers/scroll-contracts/
 
 parameters:
-# Already deployed contracts or other parameters
+  # Already deployed contracts or other parameters
   - &wstETH "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
   - &agent "0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c"
   - &l2WstETH "0xf610A9dfB7C89644979b4A0f27063E9e7d7Cda32"
@@ -12,19 +12,20 @@ parameters:
   - &l2TokenBridge "0x8aE8f22226B9d789A36AC81474e633f8bE2856c9"
   - &l2TokenBridgeImpl "0x2B9beB2890DBeFC7cA25Af3164100d139B623C24"
 
-
 misc:
   - &ZERO_ADDRESS "0x0000000000000000000000000000000000000000"
+  - &ZERO_BYTES32 "0x0000000000000000000000000000000000000000000000000000000000000000"
   - &l1ScrollOwner "0x798576400F7D662961BA15C6b3F3d813447a26a6"
   - &l2ScrollOwner "0x13d24a7ff6f5ec5ff0e9c40fc3b8c9c01c65437b"
   - &l1ScrollGatewayRouter "0xF8B1378579659D8F7EE5f3C929c2f3E332E41Fd6"
   - &l2ScrollGatewayRouter "0x4c0926ff5252a435fd19e10ed15e5a249ba19d79"
   - &l2ScrollMessenger "0x781e90f1c8fc4611c9b7497c3b47f99ef6969cbc"
   - &l1ScrollMessenger "0x6774Bcbd5ceCeF1336b5300fb5186a12DDD8b367"
-
+  - &wstETHTokenName "Wrapped liquid staked Ether 2.0"
+  - &scrollChainId 534352
 
 deployed:
-# Newly deployed contracts
+  # Newly deployed contracts
   - &l1EmergencyBreaksMultisig "0x73b047fe6337183A454c5217241D780a932777bD"
   - &l2EmergencyBreaksMultisig "0xF580753E334687C0d6b88EF563a258f048384Ee6"
   - &l1ProxyAdmin "0xCC2C53556Bc75217cf698721b29071d6f12628A9"
@@ -40,9 +41,8 @@ roles:
   - &WITHDRAWALS_DISABLER_ROLE "0x94a954c0bc99227eddbc0715a62a7e1056ed8784cd719c2303b685683908857c"
   - &WITHDRAWALS_ENABLER_ROLE "0x9ab8816a3dc0b3849ec1ac00483f6ec815b07eee2fd766a353311c823ad59d0d"
 
-
 l1:
-  rpcUrl: https://eth.drpc.org # L1_RPC_URL # https://ethereum.publicnode.com # url or env var
+  rpcUrl: L1_RPC_URL # https://eth.drpc.org # L1_RPC_URL # https://ethereum.publicnode.com # url or env var
   contracts:
     proxyAdminInterim:
       name: ProxyAdmin
@@ -61,11 +61,11 @@ l1:
       checks:
         owner: *agent
         getProxyAdmin:
-          - mustRevert: true  # TODO: must not revert after the admin role is passed
+          - mustRevert: true # TODO: must not revert after the admin role is passed
             args: [*l1TokenBridge]
             result: *agent
         getProxyImplementation:
-          - mustRevert: true  # TODO: must not revert after the admin role is passed
+          - mustRevert: true # TODO: must not revert after the admin role is passed
             args: [*l1TokenBridge]
             result: *l1TokenBridgeImpl
     tokenBridge:
@@ -120,7 +120,7 @@ l1:
         *DEPOSITS_ENABLER_ROLE : [*agent]
         *WITHDRAWALS_DISABLER_ROLE : [*agent, *l1EmergencyBreaksMultisig]
         *WITHDRAWALS_ENABLER_ROLE : [*agent]
-      proxyChecks: {}  # See checks for proxyAdmin contract, due to transparent proxy pattern
+      proxyChecks: {} # See checks for proxyAdmin contract, due to transparent proxy pattern
       implementationChecks:
         DEPOSITS_DISABLER_ROLE: *DEPOSITS_DISABLER_ROLE
         DEPOSITS_ENABLER_ROLE: *DEPOSITS_ENABLER_ROLE
@@ -191,17 +191,17 @@ l2:
         owner: *l2GovernanceExecutor
         getProxyAdmin:
           - args: [*l2WstETH]
-            mustRevert: true  # TODO: must not revert after the admin role is passed
+            mustRevert: true # TODO: must not revert after the admin role is passed
             result: *l2GovernanceExecutor
           - args: [*l2TokenBridge]
-            mustRevert: true  # TODO: must not revert after the admin role is passed
+            mustRevert: true # TODO: must not revert after the admin role is passed
             result: *l2GovernanceExecutor
         getProxyImplementation:
           - args: [*l2WstETH]
-            mustRevert: true  # TODO: must not revert after the admin role is passed
+            mustRevert: true # TODO: must not revert after the admin role is passed
             result: *l2WstETHImpl
           - args: [*l2TokenBridge]
-            mustRevert: true  # TODO: must not revert after the admin role is passed
+            mustRevert: true # TODO: must not revert after the admin role is passed
             result: *l2TokenBridgeImpl
     wstETH:
       name: ScrollStandardERC20
@@ -209,18 +209,27 @@ l2:
       proxyName: TransparentUpgradeableProxy
       implementation: *l2WstETHImpl
       checks:
-        name: Wrapped liquid staked Ether 2.0
+        name: *wstETHTokenName
         symbol: wstETH
         counterpart: *wstETH
         gateway: *l2TokenBridge
         decimals: 18
-        DOMAIN_SEPARATOR: "0x7ea5e6f23fd742b512a890cc64bcc4f1a466bacce8c83108554b76ceec5f6ca8"  # TODO: comment
+        # Domain separator must differ from the one on testnet (which is 0x55d59585e4b494d0f02527d3885816492ec87f654ffe6288710080623e823f47 on Sepolia)
+        # code from contract: keccak256(abi.encode(_TYPE_HASH, _EIP712NameHash(), _EIP712VersionHash(), block.chainid, address(this)))
+        DOMAIN_SEPARATOR: "0x7ea5e6f23fd742b512a890cc64bcc4f1a466bacce8c83108554b76ceec5f6ca8"
         allowance: null
         balanceOf: null
-        eip712Domain: null  # TODO
+        eip712Domain:
+          fields: "0x0f"
+          name: *wstETHTokenName
+          version: "1"
+          chainId: *scrollChainId
+          verifyingContract: *l2WstETH
+          salt: *ZERO_BYTES32
+          extensions: []
         nonces: null
         totalSupply: null
-      proxyChecks: {}  # See checks for proxyAdmin contract, due to transparent proxy pattern
+      proxyChecks: {} # See checks for proxyAdmin contract, due to transparent proxy pattern
       implementationChecks:
         name: ""
         symbol: ""
@@ -228,10 +237,11 @@ l2:
         gateway: *ZERO_ADDRESS
         decimals: 0
         totalSupply: 0
-        DOMAIN_SEPARATOR: null  # TODO
+        # NB, it is different from the on called from proxy as expected
+        DOMAIN_SEPARATOR: "0x308077c9a4190b4584b58a7e583629797d95d9d51b381d99ab4e892263a9eccb"
         allowance: null
         balanceOf: null
-        eip712Domain: null  # TODO
+        eip712Domain: null
         nonces: null
     tokenBridge:
       name: L2LidoGateway
@@ -288,7 +298,7 @@ l2:
         *DEPOSITS_ENABLER_ROLE : [*l2GovernanceExecutor]
         *WITHDRAWALS_DISABLER_ROLE : [*l2GovernanceExecutor, *l2EmergencyBreaksMultisig]
         *WITHDRAWALS_ENABLER_ROLE : [*l2GovernanceExecutor]
-      proxyChecks: {}  # See checks for proxyAdmin contract, due to transparent proxy pattern
+      proxyChecks: {} # See checks for proxyAdmin contract, due to transparent proxy pattern
       implementationChecks:
         DEPOSITS_DISABLER_ROLE: *DEPOSITS_DISABLER_ROLE
         DEPOSITS_ENABLER_ROLE: *DEPOSITS_ENABLER_ROLE

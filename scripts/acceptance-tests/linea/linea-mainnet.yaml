@@ -1,7 +1,7 @@
 # Linea Mainnet Deployment & Configuration
 
 parameters:
-# Already deployed contracts or other parameters
+  # Already deployed contracts or other parameters
   - &wstETH "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
   - &agent "0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c"
   - &l1MessageService "0xd19d4B5d358258f05D7B411E21A1460D11B0876F" # https://support.linea.build/hc/en-us/articles/20597805711387-Using-the-Linea-bridge-through-the-block-explorer
@@ -21,12 +21,11 @@ misc:
   - &NATIVE_STATUS "0x0000000000000000000000000000000000000222" # https://github.com/Consensys/linea-contracts/blob/3cf85529fd4539eb06ba998030c37e47f98c528a/contracts/tokenBridge/TokenBridge.sol#L59
 
 deployed:
-# Newly deployed contracts
+  # Newly deployed contracts
   - &l2WstETHProxyAdmin "0xF951d7592e03eDB0Bab3D533935e678Ce64Eb927"
   - &l2GovernanceExecutor "0x74Be82F00CC867614803ffd7f36A2a4aF0405670"
   - &l2WstETH "0xB5beDd42000b71FddE22D3eE8a79Bd49A568fC8F"
   - &l2WstETHImpl "0xc0583e2F5930EDE5Fab9D57bAC4169878730B010"
-
 
 l1:
   rpcUrl: L1_RPC_URL # https://ethereum.publicnode.com # url or env var
